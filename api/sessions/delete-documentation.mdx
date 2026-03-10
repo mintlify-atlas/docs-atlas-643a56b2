@@ -1,0 +1,80 @@
+---
+title: Delete Documentation
+description: Remove all documentation from a session
+---
+
+## DELETE /api/v1/session/{session_id}/documentation
+
+Deletes all documentation items from the session. This removes all scraped and uploaded documentation chunks but preserves the session itself and other session data.
+
+### Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  The UUID of the session to delete documentation from
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message indicating documentation was deleted
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  The session UUID
+</ResponseField>
+
+<ResponseField name="deletedCount" type="number">
+  The number of documentation items that were deleted
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X DELETE http://localhost:8090/api/v1/session/550e8400-e29b-41d4-a716-446655440000/documentation
+```
+
+### Example Response
+
+```json
+{
+  "message": "All documentation deleted successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "deletedCount": 42
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Session not found
+</ResponseField>
+
+```json
+{
+  "detail": "Session 550e8400-e29b-41d4-a716-446655440000 not found"
+}
+```
+
+## Notes
+
+- This operation deletes all documentation items (chunks) from the session
+- The session itself remains intact with all other data preserved
+- Extraction results (object classes, attributes, etc.) derived from the documentation are not automatically deleted
+- To start fresh with new documentation, delete the old documentation first, then upload or scrape new docs
+
+<Warning>
+  Deleting documentation cannot be undone. Any extraction results based on this documentation will remain in the session but cannot be regenerated without re-adding the documentation.
+</Warning>
+
+## Use Cases
+
+- Clear documentation before uploading a new version
+- Remove irrelevant scraped documentation
+- Reset the session to start the workflow over with different documentation
+- Clean up test data
+
+## Related Endpoints
+
+- [Upload Documentation](/api/sessions/upload-documentation) - Add new documentation after deletion
+- [Get Documentation](/api/sessions/get-documentation) - View documentation before deletion
+- [Delete Session](/api/sessions/delete) - Delete the entire session including all data

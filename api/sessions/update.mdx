@@ -1,0 +1,80 @@
+---
+title: Update Session
+description: Update session data by merging new data with existing session data
+---
+
+## PATCH /api/v1/session/{session_id}
+
+Updates session data by merging the provided data with existing session data. This endpoint allows you to add or modify fields in the session's data store without replacing the entire session.
+
+### Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  The UUID of the session to update
+</ParamField>
+
+### Request Body
+
+<ParamField body="data" type="object" required>
+  A JSON object containing the data to merge with the existing session data. Keys in this object will be added or updated in the session.
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the session was updated
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  The UUID of the updated session
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PATCH http://localhost:8090/api/v1/session/550e8400-e29b-41d4-a716-446655440000 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "customField": "customValue",
+      "metadata": {
+        "source": "manual",
+        "version": "1.0"
+      }
+    }
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "message": "Session updated successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Session not found or update failed
+</ResponseField>
+
+```json
+{
+  "detail": "Session 550e8400-e29b-41d4-a716-446655440000 not found or update failed"
+}
+```
+
+## Notes
+
+- The update operation merges the provided data with existing session data
+- Existing keys are overwritten, new keys are added
+- Nested objects are merged at the top level only
+- The session must exist before it can be updated
+
+## Related Endpoints
+
+- [Create Session](/api/sessions/create) - Create a new session
+- [Get Session](/api/sessions/get) - Retrieve session data
+- [Delete Session](/api/sessions/delete) - Delete a session

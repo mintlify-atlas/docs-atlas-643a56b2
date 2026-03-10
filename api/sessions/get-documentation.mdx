@@ -1,0 +1,131 @@
+---
+title: Get Documentation
+description: Retrieve all documentation items stored in a session
+---
+
+## GET /api/v1/session/{session_id}/documentation
+
+Retrieves all documentation items (chunks) stored in the session. This includes both scraped documentation from URLs and uploaded documentation files.
+
+### Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  The UUID of the session to retrieve documentation from
+</ParamField>
+
+### Response
+
+<ResponseField name="sessionId" type="string">
+  The session UUID
+</ResponseField>
+
+<ResponseField name="documentationItems" type="array">
+  Array of documentation item objects
+  
+  <Expandable title="DocumentationItem properties">
+    <ResponseField name="uuid" type="string">
+      Unique identifier for this documentation chunk
+    </ResponseField>
+    
+    <ResponseField name="url" type="string">
+      Source URL (for scraped docs) or filename (for uploads)
+    </ResponseField>
+    
+    <ResponseField name="markdown" type="string">
+      The documentation content in markdown format
+    </ResponseField>
+    
+    <ResponseField name="app" type="string">
+      Application name
+    </ResponseField>
+    
+    <ResponseField name="appVersion" type="string">
+      Application version
+    </ResponseField>
+    
+    <ResponseField name="source" type="string">
+      Source type: "scrape" or "upload"
+    </ResponseField>
+    
+    <ResponseField name="tags" type="array">
+      Array of tags extracted from the documentation
+    </ResponseField>
+    
+    <ResponseField name="category" type="string">
+      Document category (e.g., "spec_yaml", "reference_api", "tutorial")
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="count" type="number">
+  Total number of documentation items
+</ResponseField>
+
+### Example Request
+
+```bash
+curl http://localhost:8090/api/v1/session/550e8400-e29b-41d4-a716-446655440000/documentation
+```
+
+### Example Response
+
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "count": 3,
+  "documentationItems": [
+    {
+      "uuid": "doc-uuid-1",
+      "url": "https://api.example.com/docs/authentication",
+      "markdown": "# Authentication\n\nOur API uses OAuth 2.0...",
+      "app": "ExampleAPI",
+      "appVersion": "v2.1",
+      "source": "scrape",
+      "tags": ["authentication", "oauth", "security"],
+      "category": "reference_api"
+    },
+    {
+      "uuid": "doc-uuid-2",
+      "url": "openapi.yaml",
+      "markdown": "openapi: 3.0.0\ninfo:\n  title: Example API...",
+      "app": "ExampleAPI",
+      "appVersion": "v2.1",
+      "source": "upload",
+      "tags": ["openapi", "specification"],
+      "category": "spec_yaml"
+    }
+  ]
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Session not found or no documentation exists in the session
+</ResponseField>
+
+```json
+{
+  "detail": "No documentation found in session 550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+## Notes
+
+- Documentation items are chunks of the original documents
+- Each chunk has a maximum size configured by the system (default: 20,000 tokens)
+- Tags and categories are extracted during the processing phase
+- The `source` field indicates whether the documentation was scraped from URLs or uploaded directly
+
+## Use Cases
+
+- Verify that documentation was successfully processed
+- Review what documentation is available before running digester operations
+- Export documentation for offline analysis
+- Debug issues with documentation processing
+
+## Related Endpoints
+
+- [Upload Documentation](/api/sessions/upload-documentation) - Add new documentation to the session
+- [Delete Documentation](/api/sessions/delete-documentation) - Remove documentation from the session
+- [Get Session](/api/sessions/get) - View complete session data

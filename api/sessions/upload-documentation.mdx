@@ -1,0 +1,107 @@
+---
+title: Upload Documentation
+description: Upload API documentation files to a session for processing and analysis
+---
+
+## POST /api/v1/session/{session_id}/documentation
+
+Uploads an API documentation file (OpenAPI/Swagger YAML or JSON) to the session. The file is automatically chunked and processed asynchronously, with each chunk stored as a separate documentation item.
+
+### Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  The UUID of the session to upload documentation to
+</ParamField>
+
+### Request Body (multipart/form-data)
+
+<ParamField body="documentation" type="file" required>
+  The documentation file to upload. Supported formats: YAML, JSON (OpenAPI/Swagger specs)
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Status message indicating the upload was queued
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  The session UUID
+</ResponseField>
+
+<ResponseField name="jobId" type="string">
+  The UUID of the processing job created for this upload
+</ResponseField>
+
+<ResponseField name="pageId" type="string">
+  The UUID assigned to represent this uploaded file
+</ResponseField>
+
+<ResponseField name="chunksToProcess" type="number">
+  The number of chunks the file was split into for processing
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  The initial status of the upload job (always "queued")
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST http://localhost:8090/api/v1/session/550e8400-e29b-41d4-a716-446655440000/documentation \
+  -F "documentation=@openapi.yaml"
+```
+
+### Example Response
+
+```json
+{
+  "message": "Documentation upload queued for processing",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "pageId": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+  "chunksToProcess": 15,
+  "status": "queued"
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Session not found
+</ResponseField>
+
+```json
+{
+  "detail": "Session 550e8400-e29b-41d4-a716-446655440000 not found"
+}
+```
+
+## Processing Details
+
+1. **Chunking**: The uploaded file is split into chunks based on the configured chunk size (default: 20,000 tokens)
+2. **Async Processing**: A background job processes each chunk and stores it as a DocumentationItem
+3. **Metadata Extraction**: Application name and version are extracted from the session's discovery or scrape input
+4. **Job Tracking**: Use the returned `jobId` to monitor processing progress
+
+## Checking Upload Status
+
+After uploading, you can check the processing status by querying the job:
+
+```bash
+# Using the job status endpoint (if available)
+curl http://localhost:8090/api/v1/jobs/{jobId}
+
+# Or retrieve all documentation to see if chunks were added
+curl http://localhost:8090/api/v1/session/{session_id}/documentation
+```
+
+<Note>
+  The upload operation returns immediately with a job ID. The actual processing happens asynchronously in the background.
+</Note>
+
+## Related Endpoints
+
+- [Get Documentation](/api/sessions/get-documentation) - Retrieve uploaded documentation
+- [Delete Documentation](/api/sessions/delete-documentation) - Remove uploaded documentation
+- [Get Session](/api/sessions/get) - View session data including documentation items

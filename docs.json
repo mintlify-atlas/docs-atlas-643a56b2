@@ -63,7 +63,12 @@
             "pages": [
               "api/sessions/create",
               "api/sessions/get",
-              "api/sessions/list"
+              "api/sessions/update",
+              "api/sessions/delete",
+              "api/sessions/list",
+              "api/sessions/upload-documentation",
+              "api/sessions/get-documentation",
+              "api/sessions/delete-documentation"
             ]
           },
           {

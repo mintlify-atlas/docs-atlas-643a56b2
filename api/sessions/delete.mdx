@@ -1,0 +1,70 @@
+---
+title: Delete Session
+description: Delete a session and all associated data including documentation and job history
+---
+
+## DELETE /api/v1/session/{session_id}
+
+Permanently deletes a session and all associated data, including documentation items, job records, and session data. This operation cannot be undone.
+
+### Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  The UUID of the session to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message indicating the session was deleted
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  The UUID of the deleted session
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X DELETE http://localhost:8090/api/v1/session/550e8400-e29b-41d4-a716-446655440000
+```
+
+### Example Response
+
+```json
+{
+  "message": "Session deleted successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+### Error Responses
+
+<ResponseField name="404" type="error">
+  Session not found
+</ResponseField>
+
+```json
+{
+  "detail": "Session 550e8400-e29b-41d4-a716-446655440000 not found"
+}
+```
+
+## Notes
+
+- This operation permanently deletes the session and cannot be undone
+- All associated data is removed, including:
+  - Documentation items and chunks
+  - Job records and progress data
+  - Session data (inputs, outputs, intermediate results)
+- Active jobs associated with the session may continue running but their results will not be saved
+
+<Warning>
+  Once deleted, a session cannot be recovered. Make sure to export any needed data before deletion.
+</Warning>
+
+## Related Endpoints
+
+- [Create Session](/api/sessions/create) - Create a new session
+- [Get Session](/api/sessions/get) - Retrieve session data before deletion
+- [Update Session](/api/sessions/update) - Modify session data
