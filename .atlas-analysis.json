@@ -1,0 +1,122 @@
+{
+  "projectType": "api-service",
+  "projectName": "midPilot Connector Generator",
+  "projectDescription": "AI-powered microservice for generating midPoint connectors from API documentation",
+  "theme": "aspen",
+  "primaryColor": "#1c64ec",
+  "lightColor": "#ffffff",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/sessions",
+              "concepts/workflow",
+              "concepts/job-status"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/installation",
+              "guides/configuration",
+              "guides/docker-setup",
+              "guides/database-setup"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Session Management",
+            "pages": [
+              "api/sessions/create",
+              "api/sessions/get",
+              "api/sessions/list"
+            ]
+          },
+          {
+            "group": "Discovery",
+            "pages": [
+              "api/discovery/discover",
+              "api/discovery/status"
+            ]
+          },
+          {
+            "group": "Scraping",
+            "pages": [
+              "api/scrape/scrape",
+              "api/scrape/status"
+            ]
+          },
+          {
+            "group": "Digester",
+            "pages": [
+              "api/digester/object-classes",
+              "api/digester/attributes",
+              "api/digester/endpoints",
+              "api/digester/relations",
+              "api/digester/auth",
+              "api/digester/metadata"
+            ]
+          },
+          {
+            "group": "Code Generation",
+            "pages": [
+              "api/codegen/native-schema",
+              "api/codegen/connid",
+              "api/codegen/search",
+              "api/codegen/create",
+              "api/codegen/update",
+              "api/codegen/delete",
+              "api/codegen/relations"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "AI-powered connector code generation",
+    "Automated documentation discovery and scraping",
+    "Schema extraction from API documentation",
+    "Session-based workflow management",
+    "REST and SCIM protocol support",
+    "Groovy connector code generation",
+    "PostgreSQL-backed persistence",
+    "Job status tracking and monitoring"
+  ],
+  "publicApiSurface": [
+    "POST /api/v1/session - Create session",
+    "GET /api/v1/session/{id} - Get session",
+    "POST /api/v1/discovery/{session_id}/discovery - Discover documentation URLs",
+    "POST /api/v1/scrape/{session_id}/scrape - Scrape documentation",
+    "POST /api/v1/digester/{session_id}/classes - Extract object classes",
+    "POST /api/v1/digester/{session_id}/classes/{class}/attributes - Extract attributes",
+    "POST /api/v1/digester/{session_id}/classes/{class}/endpoints - Extract endpoints",
+    "POST /api/v1/digester/{session_id}/relations - Extract relations",
+    "POST /api/v1/digester/{session_id}/auth - Extract authentication info",
+    "POST /api/v1/digester/{session_id}/metadata - Extract API metadata",
+    "POST /api/v1/codegen/{session_id}/classes/{class}/native-schema - Generate native schema",
+    "POST /api/v1/codegen/{session_id}/classes/{class}/connid - Generate ConnID code",
+    "POST /api/v1/codegen/{session_id}/classes/{class}/search/{intent} - Generate search code",
+    "POST /api/v1/codegen/{session_id}/classes/{class}/create - Generate create code",
+    "POST /api/v1/codegen/{session_id}/classes/{class}/update - Generate update code",
+    "POST /api/v1/codegen/{session_id}/classes/{class}/delete - Generate delete code",
+    "POST /api/v1/codegen/{session_id}/relations/{relation_name} - Generate relation code"
+  ]
+}
