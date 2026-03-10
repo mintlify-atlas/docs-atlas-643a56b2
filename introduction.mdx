@@ -1,0 +1,116 @@
+---
+title: Introduction
+description: AI-powered microservice for generating midPoint connectors from API documentation
+---
+
+<div className="bg-gradient-to-r from-[#1c64ec] to-[#0052FF] text-white rounded-lg p-8 mb-8">
+  <h1 className="text-4xl font-bold mb-4">midPilot Connector Generator</h1>
+  <p className="text-xl opacity-90">
+    Automatically generate midPoint identity connectors from any REST or SCIM API documentation using AI
+  </p>
+</div>
+
+## What is midPilot Connector Generator?
+
+The midPilot Connector Generator is an intelligent microservice that automates the process of creating midPoint identity management connectors. Instead of manually writing connector code, you provide API documentation and let the AI extract schemas, generate code, and build production-ready connectors.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="AI-Powered Generation" icon="wand-magic-sparkles">
+    Leverages large language models to understand API documentation and generate accurate connector code
+  </Card>
+  <Card title="Automated Discovery" icon="magnifying-glass">
+    Automatically discovers and scrapes relevant API documentation from provided URLs
+  </Card>
+  <Card title="Schema Extraction" icon="table">
+    Intelligently extracts object classes, attributes, endpoints, and relationships from documentation
+  </Card>
+  <Card title="Session-Based Workflow" icon="diagram-project">
+    Organize your work into sessions with full state persistence and resumable operations
+  </Card>
+  <Card title="REST & SCIM Support" icon="code">
+    Supports both REST APIs and SCIM protocol with automatic protocol detection
+  </Card>
+  <Card title="Groovy Code Output" icon="file-code">
+    Generates production-ready Groovy connector code compatible with midPoint
+  </Card>
+  <Card title="Job Tracking" icon="list-check">
+    Monitor progress with detailed job status and stage information
+  </Card>
+  <Card title="Database Persistence" icon="database">
+    PostgreSQL-backed storage ensures your work is never lost
+  </Card>
+</CardGroup>
+
+## How It Works
+
+The connector generation process follows a structured workflow:
+
+<Steps>
+  <Step title="Create a Session">
+    Start by creating a new session to organize your connector generation work
+  </Step>
+  <Step title="Discover Documentation">
+    Provide the target application name or URLs, and the service discovers relevant API documentation
+  </Step>
+  <Step title="Scrape Content">
+    The scraper fetches and processes documentation pages, filtering out irrelevant content
+  </Step>
+  <Step title="Extract Schema">
+    AI analyzes the documentation to extract object classes, attributes, API endpoints, authentication methods, and relationships
+  </Step>
+  <Step title="Generate Code">
+    Based on extracted schemas, the service generates Groovy connector code including native schemas, ConnID mappings, and CRUD operations
+  </Step>
+  <Step title="Download & Deploy">
+    Retrieve the generated code and deploy it to your midPoint instance
+  </Step>
+</Steps>
+
+## Architecture
+
+The service is built with FastAPI and organized into four core modules:
+
+- **Discovery** - Finds candidate documentation URLs using search engines
+- **Scrape** - Fetches and filters relevant documentation content
+- **Digester** - Extracts structured information using AI
+- **CodeGen** - Generates Groovy connector code from extracted schemas
+
+All operations are asynchronous with job tracking, allowing you to monitor long-running tasks and resume work later.
+
+## Use Cases
+
+<AccordionGroup>
+  <Accordion title="Rapid Connector Prototyping">
+    Quickly generate a working connector prototype from API docs to validate integration feasibility before investing in manual development.
+  </Accordion>
+  <Accordion title="Legacy System Integration">
+    Connect legacy systems with poor or incomplete documentation by letting AI infer schemas and patterns from available docs.
+  </Accordion>
+  <Accordion title="SaaS Application Onboarding">
+    Accelerate onboarding of new SaaS applications by automatically generating connectors from their public API documentation.
+  </Accordion>
+  <Accordion title="Connector Maintenance">
+    When APIs change, regenerate connector code to quickly update schemas and endpoints while preserving custom business logic.
+  </Accordion>
+</AccordionGroup>
+
+## Getting Started
+
+Ready to generate your first connector? Head over to the [Quickstart](/quickstart) guide to set up the service and create your first connector in minutes.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running in 5 minutes
+  </Card>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Learn how the system works
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/sessions/create">
+    Explore the REST API
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/guides/configuration">
+    Configure the service
+  </Card>
+</CardGroup>

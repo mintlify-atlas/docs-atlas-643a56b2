@@ -1,0 +1,589 @@
+---
+title: Database Setup
+description: Set up PostgreSQL database and run Alembic migrations
+---
+
+The midPilot Connector Generator uses PostgreSQL for data persistence and Alembic for database schema migrations. This guide covers database setup and migration management.
+
+## Database Requirements
+
+<Card title="PostgreSQL 15+" icon="database">
+  PostgreSQL 15 or later with `asyncpg` driver support
+</Card>
+
+The application uses:
+- **SQLAlchemy** - Async ORM for database operations
+- **Alembic** - Database migration tool
+- **asyncpg** - High-performance async PostgreSQL driver
+
+## Setup Methods
+
+Choose your preferred database setup method:
+
+<Tabs>
+  <Tab title="Docker Compose (Recommended)">
+    The easiest way to get started is using the provided Docker Compose configuration.
+
+    <Steps>
+      <Step title="Configure environment">
+        Edit your `.env` file:
+        ```bash
+        DATABASE__HOST=localhost
+        DATABASE__PORT=5432
+        DATABASE__NAME=connector_db
+        DATABASE__USER=connector_user
+        DATABASE__PASSWORD=secure_password_here
+        
+        # Auto-constructed by the app
+        DATABASE__URL=postgresql+asyncpg://${DATABASE__USER}:${DATABASE__PASSWORD}@${DATABASE__HOST}:${DATABASE__PORT}/${DATABASE__NAME}
+        ```
+      </Step>
+
+      <Step title="Start the database">
+        ```bash
+        # Start only the database service
+        docker compose up db -d
+        
+        # Or start all services
+        docker compose up -d
+        ```
+        
+        The database will:
+        - Start PostgreSQL 15 Alpine
+        - Create the configured database
+        - Run health checks
+        - Persist data in `postgres_data` volume
+      </Step>
+
+      <Step title="Verify the database">
+        ```bash
+        # Check health status
+        docker compose ps
+        
+        # Test connection
+        docker compose exec db psql -U connector_user -d connector_db -c "SELECT version();"
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Manual Docker">
+    Run PostgreSQL manually using Docker:
+
+    <Steps>
+      <Step title="Start PostgreSQL container">
+        ```bash
+        docker run --name postgres \
+          -e POSTGRES_USER=connector_user \
+          -e POSTGRES_PASSWORD=secure_password \
+          -e POSTGRES_DB=connector_db \
+          -p 5432:5432 \
+          -v postgres_data:/var/lib/postgresql/data \
+          -d postgres:15-alpine
+        ```
+      </Step>
+
+      <Step title="Configure .env">
+        ```bash
+        DATABASE__HOST=localhost
+        DATABASE__PORT=5432
+        DATABASE__NAME=connector_db
+        DATABASE__USER=connector_user
+        DATABASE__PASSWORD=secure_password
+        ```
+      </Step>
+
+      <Step title="Test connection">
+        ```bash
+        docker exec -it postgres psql -U connector_user -d connector_db
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Local PostgreSQL">
+    Use a locally installed PostgreSQL server:
+
+    <Steps>
+      <Step title="Install PostgreSQL">
+        ```bash
+        # Ubuntu/Debian
+        sudo apt-get install postgresql-15
+        
+        # macOS
+        brew install postgresql@15
+        
+        # Start service
+        sudo systemctl start postgresql  # Linux
+        brew services start postgresql@15  # macOS
+        ```
+      </Step>
+
+      <Step title="Create database and user">
+        ```bash
+        # Connect as postgres user
+        sudo -u postgres psql
+        
+        # Create user and database
+        CREATE USER connector_user WITH PASSWORD 'secure_password';
+        CREATE DATABASE connector_db OWNER connector_user;
+        GRANT ALL PRIVILEGES ON DATABASE connector_db TO connector_user;
+        \q
+        ```
+      </Step>
+
+      <Step title="Configure .env">
+        ```bash
+        DATABASE__HOST=localhost
+        DATABASE__PORT=5432
+        DATABASE__NAME=connector_db
+        DATABASE__USER=connector_user
+        DATABASE__PASSWORD=secure_password
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Database Configuration
+
+### Connection Parameters
+
+The application supports both individual parameters and full connection URLs:
+
+<CodeGroup>
+```bash Individual Parameters
+DATABASE__HOST=localhost
+DATABASE__PORT=5432
+DATABASE__NAME=connector_db
+DATABASE__USER=connector_user
+DATABASE__PASSWORD=secure_password
+```
+
+```bash Full URL
+DATABASE__URL=postgresql+asyncpg://connector_user:secure_password@localhost:5432/connector_db
+```
+</CodeGroup>
+
+<Note>
+If `DATABASE__URL` is not provided or contains placeholders (e.g., `${DATABASE__USER}`), the application will automatically construct it from individual parameters.
+</Note>
+
+### Connection Pool Settings
+
+Configure the SQLAlchemy connection pool:
+
+```bash
+# Connection pool size
+DATABASE__POOL_SIZE=10
+
+# Maximum overflow connections
+DATABASE__MAX_OVERFLOW=20
+
+# Enable SQL query logging (for debugging)
+DATABASE__ECHO=false
+```
+
+<ParamField path="DATABASE__POOL_SIZE" type="integer" default="10">
+  Number of connections to maintain in the pool
+</ParamField>
+
+<ParamField path="DATABASE__MAX_OVERFLOW" type="integer" default="20">
+  Maximum connections beyond pool_size
+</ParamField>
+
+<ParamField path="DATABASE__ECHO" type="boolean" default="false">
+  Log all SQL queries (useful for debugging, but verbose)
+</ParamField>
+
+## Alembic Migrations
+
+Alembic manages database schema changes through migrations. The application includes migration files in the `alembic/versions/` directory.
+
+### Running Migrations
+
+<Steps>
+  <Step title="Check current migration status">
+    ```bash
+    uv run alembic current
+    ```
+    
+    Shows the currently applied migration revision.
+  </Step>
+
+  <Step title="View migration history">
+    ```bash
+    uv run alembic history
+    ```
+    
+    Displays all available migrations.
+  </Step>
+
+  <Step title="Run all pending migrations">
+    ```bash
+    uv run alembic upgrade head
+    ```
+    
+    Applies all migrations up to the latest version.
+  </Step>
+
+  <Step title="Verify the schema">
+    ```bash
+    # Connect to database
+    docker compose exec db psql -U connector_user -d connector_db
+    
+    # List tables
+    \dt
+    
+    # Describe a table
+    \d table_name
+    ```
+  </Step>
+</Steps>
+
+### Migration Commands
+
+<CodeGroup>
+```bash Upgrade
+# Upgrade to latest
+uv run alembic upgrade head
+
+# Upgrade to specific revision
+uv run alembic upgrade abc123
+
+# Upgrade one version
+uv run alembic upgrade +1
+
+# Show SQL without executing
+uv run alembic upgrade head --sql
+```
+
+```bash Downgrade
+# Downgrade one version
+uv run alembic downgrade -1
+
+# Downgrade to specific revision
+uv run alembic downgrade abc123
+
+# Downgrade to base (drop all tables)
+uv run alembic downgrade base
+
+# Show SQL without executing
+uv run alembic downgrade -1 --sql
+```
+
+```bash Create Migration
+# Auto-generate from models
+uv run alembic revision --autogenerate -m "Add user table"
+
+# Create empty migration
+uv run alembic revision -m "Custom migration"
+
+# Review generated migration before applying
+cat alembic/versions/<revision>_add_user_table.py
+```
+
+```bash Inspect
+# Show current revision
+uv run alembic current
+
+# Show migration history
+uv run alembic history
+
+# Show verbose history
+uv run alembic history --verbose
+
+# Show specific range
+uv run alembic history -r base:head
+```
+</CodeGroup>
+
+### Existing Migrations
+
+The application includes these migrations:
+
+<AccordionGroup>
+  <Accordion title="001_initial_schema.py">
+    **Purpose:** Creates initial database schema
+    
+    Tables created:
+    - Base tables for connector storage
+    - Initial indexes and constraints
+    
+    ```bash
+    # View migration
+    cat alembic/versions/001_initial_schema.py
+    ```
+  </Accordion>
+
+  <Accordion title="002_add_scrape_job_ids_column_to_.py">
+    **Purpose:** Adds job tracking column
+    
+    Changes:
+    - Adds `scrape_job_ids` column
+    - Updates related indexes
+    
+    ```bash
+    # View migration
+    cat alembic/versions/002_add_scrape_job_ids_column_to_.py
+    ```
+  </Accordion>
+
+  <Accordion title="003_add_normalized_input_column_to_jobs_.py">
+    **Purpose:** Adds input normalization support
+    
+    Changes:
+    - Adds `normalized_input` column to jobs table
+    - Enables input deduplication
+    
+    ```bash
+    # View migration
+    cat alembic/versions/003_add_normalized_input_column_to_jobs_.py
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Alembic Configuration
+
+The migration system is configured in `alembic.ini`:
+
+```ini
+[alembic]
+script_location = alembic
+prepend_sys_path = .
+
+# Database URL loaded from DATABASE__URL environment variable
+sqlalchemy.url =
+```
+
+<Note>
+The database URL is read from the `DATABASE__URL` environment variable by `alembic/env.py`, ensuring consistency with application configuration.
+</Note>
+
+## Database Management
+
+### Backup and Restore
+
+<CodeGroup>
+```bash Backup
+# Backup database
+docker compose exec db pg_dump -U connector_user connector_db > backup.sql
+
+# Backup with timestamp
+docker compose exec db pg_dump -U connector_user connector_db > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Compressed backup
+docker compose exec db pg_dump -U connector_user connector_db | gzip > backup.sql.gz
+
+# Backup schema only
+docker compose exec db pg_dump -U connector_user --schema-only connector_db > schema.sql
+```
+
+```bash Restore
+# Restore from backup
+docker compose exec -T db psql -U connector_user connector_db < backup.sql
+
+# Restore from compressed
+gunzip < backup.sql.gz | docker compose exec -T db psql -U connector_user connector_db
+
+# Restore to new database
+docker compose exec db createdb -U connector_user connector_db_restored
+docker compose exec -T db psql -U connector_user connector_db_restored < backup.sql
+```
+</CodeGroup>
+
+### Reset Database
+
+To completely reset the database:
+
+<Steps>
+  <Step title="Downgrade to base">
+    ```bash
+    uv run alembic downgrade base
+    ```
+    
+    This removes all tables created by migrations.
+  </Step>
+
+  <Step title="Re-run migrations">
+    ```bash
+    uv run alembic upgrade head
+    ```
+    
+    This recreates all tables with the latest schema.
+  </Step>
+</Steps>
+
+Or using Docker:
+
+```bash
+# Stop and remove volumes
+docker compose down -v
+
+# Start fresh
+docker compose up -d
+
+# Run migrations
+docker compose exec midpilot-connector-gen uv run alembic upgrade head
+```
+
+### Access Database
+
+<CodeGroup>
+```bash psql (Docker)
+# Interactive shell
+docker compose exec db psql -U connector_user -d connector_db
+
+# Run single query
+docker compose exec db psql -U connector_user -d connector_db -c "SELECT COUNT(*) FROM jobs;"
+
+# Execute SQL file
+docker compose exec -T db psql -U connector_user -d connector_db < query.sql
+```
+
+```bash psql (Local)
+# Connect to database
+psql -h localhost -U connector_user -d connector_db
+
+# With password prompt
+PGPASSWORD=secure_password psql -h localhost -U connector_user -d connector_db
+```
+
+```bash Common Queries
+# List all tables
+\dt
+
+# Describe table schema
+\d table_name
+
+# Show table sizes
+\dt+
+
+# List indexes
+\di
+
+# Show connections
+SELECT * FROM pg_stat_activity;
+
+# Quit
+\q
+```
+</CodeGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Migration fails with 'relation already exists'">
+    **Symptom:** Alembic migration fails because a table/column already exists
+    
+    **Solution:**
+    ```bash
+    # Check current revision
+    uv run alembic current
+    
+    # Mark migration as applied without running it
+    uv run alembic stamp head
+    
+    # Or rollback and retry
+    uv run alembic downgrade -1
+    uv run alembic upgrade head
+    ```
+  </Accordion>
+
+  <Accordion title="Connection refused">
+    **Symptom:** `could not connect to server: Connection refused`
+    
+    **Solution:**
+    ```bash
+    # Check if database is running
+    docker compose ps db
+    
+    # Check database logs
+    docker compose logs db
+    
+    # Verify environment variables
+    env | grep DATABASE
+    
+    # Test connection manually
+    docker compose exec db psql -U connector_user -d connector_db
+    ```
+  </Accordion>
+
+  <Accordion title="Authentication failed">
+    **Symptom:** `FATAL: password authentication failed`
+    
+    **Solution:**
+    - Verify `DATABASE__USER` and `DATABASE__PASSWORD` in `.env`
+    - Ensure user has correct permissions
+    - Recreate user if needed:
+    ```bash
+    docker compose exec db psql -U postgres
+    DROP USER IF EXISTS connector_user;
+    CREATE USER connector_user WITH PASSWORD 'new_password';
+    GRANT ALL PRIVILEGES ON DATABASE connector_db TO connector_user;
+    ```
+  </Accordion>
+
+  <Accordion title="Database doesn't exist">
+    **Symptom:** `FATAL: database "connector_db" does not exist`
+    
+    **Solution:**
+    ```bash
+    # Create database
+    docker compose exec db createdb -U postgres connector_db
+    
+    # Grant permissions
+    docker compose exec db psql -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE connector_db TO connector_user;"
+    
+    # Run migrations
+    uv run alembic upgrade head
+    ```
+  </Accordion>
+
+  <Accordion title="Slow migrations">
+    **Symptom:** Migrations take a long time
+    
+    **Solution:**
+    - Check database resources
+    - Review migration SQL for inefficiencies
+    - Run migrations during low-traffic periods
+    ```bash
+    # Preview SQL without executing
+    uv run alembic upgrade head --sql > migration.sql
+    
+    # Review the SQL
+    cat migration.sql
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Production Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Backups" icon="clock">
+    Schedule automated backups with retention policies
+  </Card>
+  <Card title="Test Migrations" icon="vial">
+    Test migrations in staging before production
+  </Card>
+  <Card title="Monitor Performance" icon="chart-line">
+    Track query performance and connection pool usage
+  </Card>
+  <Card title="Use Connection Pooling" icon="plug">
+    Tune pool_size and max_overflow for your workload
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure database connection settings
+  </Card>
+  <Card title="Docker Setup" icon="docker" href="/guides/docker-setup">
+    Deploy with Docker Compose
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/sessions/create">
+    Start using the API
+  </Card>
+</CardGroup>

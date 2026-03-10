@@ -1,0 +1,275 @@
+---
+title: 'Extract Object Classes'
+description: 'Extract object classes from API documentation'
+api: 'POST /digester/{session_id}/classes'
+---
+
+Extract object classes (e.g., User, Group, Role, Permission) from documentation stored in or uploaded to the session. Object classes represent first-class identity/access management domain concepts.
+
+## Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="filter_relevancy" type="boolean" default="true">
+  Filter object classes by relevancy to IGA/IDM domain
+</ParamField>
+
+<ParamField query="min_relevancy_level" type="string" default="high">
+  Minimum relevancy level. Options: `low`, `medium`, `high`
+</ParamField>
+
+<ParamField query="use_previous_session_data" type="boolean" default="true">
+  Whether to use previous session data if available
+</ParamField>
+
+## Response
+
+Returns a job ID to poll for results.
+
+<ResponseField name="jobId" type="string">
+  Job ID (UUID) to track extraction progress
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes?filter_relevancy=true&min_relevancy_level=high" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "jobId": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+---
+
+## Get Object Classes Status
+
+<api method="GET" path="/digester/{session_id}/classes" />
+
+Get the status and results of the object classes extraction job.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="jobId" type="string">
+  Job ID (optional, will use session's job if not provided)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Job status: `pending`, `running`, `finished`, or `failed`
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Extraction results (available when status is `finished`)
+  
+  <ResponseField name="result.objectClasses" type="array">
+    Array of extracted object classes
+    
+    <ResponseField name="result.objectClasses[].name" type="string">
+      Exact type/object name as it appears in the documentation (preserves original casing)
+    </ResponseField>
+    
+    <ResponseField name="result.objectClasses[].relevant" type="string">
+      Relevancy indicator: `true`, `false`, or `maybe`
+    </ResponseField>
+    
+    <ResponseField name="result.objectClasses[].superclass" type="string">
+      Name of parent type if inheritance is documented (e.g., "AdminUser extends User")
+    </ResponseField>
+    
+    <ResponseField name="result.objectClasses[].abstract" type="boolean">
+      Whether the type is abstract (not directly instantiated)
+    </ResponseField>
+    
+    <ResponseField name="result.objectClasses[].embedded" type="boolean">
+      Whether the type is used only as an embedded component (no independent CRUD)
+    </ResponseField>
+    
+    <ResponseField name="result.objectClasses[].description" type="string">
+      Brief explanation of what this class represents in the system
+    </ResponseField>
+    
+    <ResponseField name="result.objectClasses[].relevantChunks" type="array">
+      List of documentation chunk UUIDs containing relevant information
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes?jobId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "objectClasses": [
+      {
+        "name": "User",
+        "relevant": "true",
+        "superclass": null,
+        "abstract": false,
+        "embedded": false,
+        "description": "Represents a user account in the system with authentication credentials and profile information.",
+        "relevantChunks": [
+          {"docUuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+        ]
+      },
+      {
+        "name": "Group",
+        "relevant": "true",
+        "superclass": null,
+        "abstract": false,
+        "embedded": false,
+        "description": "Represents a collection of users for access management and permission assignment.",
+        "relevantChunks": [
+          {"docUuid": "b2c3d4e5-f6a7-8901-bcde-f12345678901"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Get Specific Object Class
+
+<api method="GET" path="/digester/{session_id}/classes/{object_class}" />
+
+Get a specific object class by name from the session, including its attributes and endpoints if they have been extracted.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name (case-insensitive, e.g., "User", "Group")
+</ParamField>
+
+### Response
+
+Returns the complete object class data including any extracted attributes and endpoints.
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "name": "User",
+  "relevant": "true",
+  "description": "Represents a user account in the system.",
+  "relevantChunks": [
+    {"docUuid": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"}
+  ],
+  "attributes": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier",
+      "mandatory": true,
+      "readable": true
+    }
+  },
+  "endpoints": [
+    {
+      "path": "/users/{id}",
+      "method": "GET",
+      "description": "Get user by ID"
+    }
+  ]
+}
+```
+
+---
+
+## Upload All Object Classes
+
+<api method="PUT" path="/digester/{session_id}/classes" />
+
+Upload all object classes to the session, replacing existing data.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField body="objectClasses" type="array" required>
+  Complete object classes data with `objectClasses` array
+</ParamField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "objectClasses": [
+      {
+        "name": "User",
+        "relevant": "true",
+        "description": "User account"
+      }
+    ]
+  }'
+```
+
+---
+
+## Upload One Object Class
+
+<api method="PUT" path="/digester/{session_id}/classes/{object_class}" />
+
+Upload or update a specific object class in the session.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name
+</ParamField>
+
+<ParamField body="data" type="object" required>
+  Object class data (name field will be set from URL parameter)
+</ParamField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "description": "User account",
+    "relevant": "true"
+  }'
+```

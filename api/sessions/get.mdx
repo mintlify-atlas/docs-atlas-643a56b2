@@ -1,0 +1,130 @@
+---
+title: "Get Session"
+api: "GET /api/v1/session/{session_id}"
+description: "Retrieve session data by session ID"
+---
+
+## Overview
+
+Retrieves complete session data including metadata, stored configuration, and timestamps. Sessions contain all state information for connector generation workflows.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session to retrieve
+</ParamField>
+
+## Response
+
+<ResponseField name="sessionId" type="string (UUID)" required>
+  The unique identifier for the session
+</ResponseField>
+
+<ResponseField name="data" type="object" required>
+  The session data stored as a dictionary. Contains workflow-specific information.
+  
+  <Expandable title="Common data fields">
+    <ResponseField name="discoveryInput" type="object">
+      Discovery configuration including application name and version
+      
+      <Expandable title="discoveryInput properties">
+        <ResponseField name="applicationName" type="string">
+          Name of the application being connected to
+        </ResponseField>
+        <ResponseField name="applicationVersion" type="string">
+          Version of the application
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="scrapeInput" type="object">
+      Scraping configuration including URLs and application metadata
+      
+      <Expandable title="scrapeInput properties">
+        <ResponseField name="applicationName" type="string">
+          Name of the application
+        </ResponseField>
+        <ResponseField name="applicationVersion" type="string">
+          Version of the application
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+    
+    <ResponseField name="documentationItems" type="array">
+      Array of documentation items from scraping or uploads
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  Timestamp when the session was created (ISO 8601 format)
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string" required>
+  Timestamp when the session was last updated (ISO 8601 format)
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "data": {
+    "discoveryInput": {
+      "applicationName": "My API",
+      "applicationVersion": "v2.0"
+    },
+    "documentationItems": [],
+    "scrapeInput": {
+      "applicationName": "My API",
+      "applicationVersion": "v2.0",
+      "baseUrl": "https://api.example.com"
+    }
+  },
+  "createdAt": "2026-03-10T10:30:00Z",
+  "updatedAt": "2026-03-10T10:35:00Z"
+}
+```
+
+## Status Codes
+
+<ResponseField name="200" type="OK">
+  Session data retrieved successfully
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session not found
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000 \
+  -H "Content-Type: application/json"
+```
+
+## Error Responses
+
+### 404 Not Found
+
+```json
+{
+  "detail": "Session 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+This error occurs when the specified session ID does not exist in the database.
+
+## Usage Notes
+
+- Sessions persist all workflow state including discovery results, scrape data, and documentation
+- The `data` field is a flexible dictionary that can contain any workflow-specific information
+- Sessions are created via the [Create Session](/api/sessions/create) endpoint
+- Use [Update Session](/api/sessions/get) to modify session data
+
+## Related Endpoints
+
+- [Create Session](/api/sessions/create) - Create a new session
+- [Update Session](/api/sessions/get) - Update session data
+- [Check Session Exists](/api/sessions/get) - Verify session existence
+- [Delete Session](/api/sessions/get) - Delete a session

@@ -1,0 +1,182 @@
+---
+title: "Get Scrape Status"
+api: "GET /api/v1/scrape/{session_id}/scrape"
+description: "Get the status of a documentation scraping job"
+---
+
+This endpoint retrieves the current status and progress of a scraping job. It provides information about the job's lifecycle, including when it was created, started, and updated, as well as iteration progress, results, or errors.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="jobId" type="string">
+  Job ID (UUID format). If not provided, the system will use the scrape job ID associated with the session
+</ParamField>
+
+## Response
+
+<ResponseField name="jobId" type="string" required>
+  Job identifier (UUID format)
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Current status of the job. Possible values:
+  - `queued` - Job is waiting to be processed
+  - `running` - Job is currently executing
+  - `finished` - Job completed successfully
+  - `failed` - Job encountered an error
+  - `not_found` - Job ID does not exist
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Job creation time in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="startedAt" type="string">
+  Job start time in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Last update time in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="progress" type="object">
+  Iteration-based progress information about the scraping job
+  
+  <ResponseField name="stage" type="string">
+    High-level stage of the job (e.g., "queue", "running", "finished")
+  </ResponseField>
+  
+  <ResponseField name="message" type="string">
+    Human-friendly note about the current work being performed
+  </ResponseField>
+  
+  <ResponseField name="completedIterations" type="integer">
+    Current iteration number (how many pages have been processed)
+  </ResponseField>
+  
+  <ResponseField name="totalIterations" type="integer">
+    Maximum iterations configured for the scraping job
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Result payload when status is 'finished'. Contains information about the scraped documentation
+  
+  <ResponseField name="finishReason" type="string">
+    Reason why the scraping job finished (e.g., "completed", "max_iterations", "no_more_links")
+  </ResponseField>
+  
+  <ResponseField name="savedPagesCount" type="integer">
+    Total number of documentation pages successfully scraped and saved
+  </ResponseField>
+  
+  <ResponseField name="pageChunksCount" type="integer">
+    Total number of text chunks extracted from all scraped pages
+  </ResponseField>
+  
+  <ResponseField name="savedPages" type="object">
+    Dictionary mapping URLs to page metadata for all scraped pages
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  List of error messages if the job failed. Each item is a single error line for presentation
+</ResponseField>
+
+## Example Request
+
+```bash
+# Using the session's scrape job ID
+curl "https://api.example.com/api/v1/scrape/550e8400-e29b-41d4-a716-446655440000/scrape"
+
+# Using a specific job ID
+curl "https://api.example.com/api/v1/scrape/550e8400-e29b-41d4-a716-446655440000/scrape?jobId=9b3e7f12-8c4a-43d9-b5e2-1a9c8f7d6e5b"
+```
+
+## Example Response (Running)
+
+```json
+{
+  "jobId": "9b3e7f12-8c4a-43d9-b5e2-1a9c8f7d6e5b",
+  "status": "running",
+  "createdAt": "2026-03-10T15:00:00Z",
+  "startedAt": "2026-03-10T15:00:05Z",
+  "updatedAt": "2026-03-10T15:02:30Z",
+  "progress": {
+    "stage": "running",
+    "message": "Scraping documentation pages",
+    "completedIterations": 15,
+    "totalIterations": 50
+  }
+}
+```
+
+## Example Response (Finished)
+
+```json
+{
+  "jobId": "9b3e7f12-8c4a-43d9-b5e2-1a9c8f7d6e5b",
+  "status": "finished",
+  "createdAt": "2026-03-10T15:00:00Z",
+  "startedAt": "2026-03-10T15:00:05Z",
+  "updatedAt": "2026-03-10T15:08:45Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Scraping completed successfully",
+    "completedIterations": 42,
+    "totalIterations": 50
+  },
+  "result": {
+    "finishReason": "no_more_links",
+    "savedPagesCount": 42,
+    "pageChunksCount": 328,
+    "savedPages": {
+      "https://docs.evolveum.com/midpoint/reference/": {
+        "title": "midPoint Reference Documentation",
+        "chunks": 8,
+        "scrapedAt": "2026-03-10T15:00:15Z"
+      },
+      "https://docs.evolveum.com/midpoint/install/": {
+        "title": "Installation Guide",
+        "chunks": 12,
+        "scrapedAt": "2026-03-10T15:01:22Z"
+      }
+    }
+  }
+}
+```
+
+## Example Response (Failed)
+
+```json
+{
+  "jobId": "9b3e7f12-8c4a-43d9-b5e2-1a9c8f7d6e5b",
+  "status": "failed",
+  "createdAt": "2026-03-10T15:00:00Z",
+  "startedAt": "2026-03-10T15:00:05Z",
+  "updatedAt": "2026-03-10T15:01:30Z",
+  "progress": {
+    "stage": "failed",
+    "message": "Failed to scrape documentation"
+  },
+  "errors": [
+    "Connection timeout while fetching https://docs.evolveum.com/midpoint/reference/",
+    "Unable to reach documentation server after 3 retries"
+  ]
+}
+```
+
+## Notes
+
+- If the `jobId` query parameter is not provided, the endpoint automatically retrieves the scrape job ID from the session
+- Poll this endpoint periodically to track the progress of long-running scraping jobs
+- The `completedIterations` field shows how many pages have been processed out of the `totalIterations` maximum
+- The `result` field is only populated when the job status is `finished`
+- The `errors` field is only populated when the job status is `failed`
+- The scraped content is stored in the session and can be used by subsequent digester and code generation steps

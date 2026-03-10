@@ -1,0 +1,295 @@
+---
+title: 'Extract Attributes'
+description: 'Extract attribute schema for a specific object class'
+api: 'POST /digester/{session_id}/classes/{object_class}/attributes'
+---
+
+Extract the attributes schema (properties, types, constraints) for a specific object class. Only processes documentation chunks that are relevant to the object class.
+
+<Note>
+  You must extract object classes first using `/classes` endpoint before extracting attributes.
+</Note>
+
+## Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name (e.g., "User", "Group"). Case-insensitive.
+</ParamField>
+
+<ParamField query="use_previous_session_data" type="boolean" default="true">
+  Whether to use previous session data if available
+</ParamField>
+
+## Response
+
+Returns a job ID to poll for results.
+
+<ResponseField name="jobId" type="string">
+  Job ID (UUID) to track extraction progress
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User/attributes" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "jobId": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+---
+
+## Get Attributes Status
+
+<api method="GET" path="/digester/{session_id}/classes/{object_class}/attributes" />
+
+Get the status and results of the attributes extraction job.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name
+</ParamField>
+
+<ParamField query="jobId" type="string">
+  Job ID (optional, will use session's job if not provided)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Job status: `pending`, `running`, `finished`, or `failed`
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Extraction results (available when status is `finished`)
+  
+  <ResponseField name="result.attributes" type="object">
+    Map of attribute name to attribute metadata
+    
+    <ResponseField name="result.attributes[key].type" type="string">
+      JSON Schema type: `string`, `integer`, `number`, `boolean`, `object`, `array`, or `reference <TargetClass>`
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].format" type="string">
+      OpenAPI format (e.g., `email`, `uri`, `int64`, `date-time`, `embedded`, `reference`)
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].description" type="string">
+      Property description from the schema
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].mandatory" type="boolean">
+      True when the property is listed in the object's `required` array
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].updatable" type="boolean">
+      False if `readOnly=true`, otherwise true
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].creatable" type="boolean">
+      False if `readOnly=true`, otherwise true
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].readable" type="boolean">
+      False if `writeOnly=true`, otherwise true
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].multivalue" type="boolean">
+      True if the property type is `array`
+    </ResponseField>
+    
+    <ResponseField name="result.attributes[key].returnedByDefault" type="boolean">
+      True if returned by default without additional expansion calls
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User/attributes?jobId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "attributes": {
+      "id": {
+        "type": "string",
+        "format": "",
+        "description": "Unique identifier for the user",
+        "mandatory": true,
+        "updatable": false,
+        "creatable": false,
+        "readable": true,
+        "multivalue": false,
+        "returnedByDefault": true
+      },
+      "username": {
+        "type": "string",
+        "format": "",
+        "description": "Username for authentication",
+        "mandatory": true,
+        "updatable": true,
+        "creatable": true,
+        "readable": true,
+        "multivalue": false,
+        "returnedByDefault": true
+      },
+      "email": {
+        "type": "string",
+        "format": "email",
+        "description": "User's email address",
+        "mandatory": true,
+        "updatable": true,
+        "creatable": true,
+        "readable": true,
+        "multivalue": false,
+        "returnedByDefault": true
+      },
+      "createdAt": {
+        "type": "string",
+        "format": "date-time",
+        "description": "Timestamp when the user was created",
+        "mandatory": false,
+        "updatable": false,
+        "creatable": false,
+        "readable": true,
+        "multivalue": false,
+        "returnedByDefault": true
+      },
+      "roles": {
+        "type": "array",
+        "format": "reference",
+        "description": "List of roles assigned to the user",
+        "mandatory": false,
+        "updatable": true,
+        "creatable": true,
+        "readable": true,
+        "multivalue": true,
+        "returnedByDefault": false
+      },
+      "profile": {
+        "type": "object",
+        "format": "embedded",
+        "description": "User profile information",
+        "mandatory": false,
+        "updatable": true,
+        "creatable": true,
+        "readable": true,
+        "multivalue": false,
+        "returnedByDefault": true
+      }
+    }
+  }
+}
+```
+
+---
+
+## Override Attributes
+
+<api method="PUT" path="/digester/{session_id}/classes/{object_class}/attributes" />
+
+Manually override the attributes for an object class.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name (will be normalized to lowercase)
+</ParamField>
+
+<ParamField body="attributes" type="object" required>
+  Attributes schema as JSON object
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  Session ID
+</ResponseField>
+
+<ResponseField name="objectClass" type="string">
+  Object class name (normalized)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User/attributes" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "attributes": {
+      "id": {
+        "type": "string",
+        "description": "User identifier",
+        "mandatory": true,
+        "readable": true
+      }
+    }
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "message": "Attributes for user overridden successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "objectClass": "user"
+}
+```
+
+## Error Responses
+
+<ResponseField name="status_code" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+### Common Errors
+
+**404 Not Found** - Object class not found or no object classes in session
+```json
+{
+  "detail": "No object classes found in session. Please run /classes endpoint first."
+}
+```
+
+**400 Bad Request** - No relevant chunks found for the object class
+```json
+{
+  "detail": "No relevant chunks found for object class 'User'. Cannot extract attributes."
+}
+```

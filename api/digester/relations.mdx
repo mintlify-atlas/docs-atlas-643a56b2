@@ -1,0 +1,255 @@
+---
+title: 'Extract Relations'
+description: 'Extract relationships between object classes'
+api: 'POST /digester/{session_id}/relations'
+---
+
+Extract relations between object classes from documentation. Relations represent connections like "User has Groups", "Group has Members", etc.
+
+<Note>
+  You must extract object classes first using `/classes` endpoint before extracting relations.
+</Note>
+
+## Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="use_previous_session_data" type="boolean" default="true">
+  Whether to use previous session data if available
+</ParamField>
+
+## Response
+
+Returns a job ID to poll for results.
+
+<ResponseField name="jobId" type="string">
+  Job ID (UUID) to track extraction progress
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/relations" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "jobId": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+---
+
+## Get Relations Status
+
+<api method="GET" path="/digester/{session_id}/relations" />
+
+Get the status and results of the relations extraction job.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="jobId" type="string">
+  Job ID (optional, will use session's job if not provided)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Job status: `pending`, `running`, `finished`, or `failed`
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Extraction results (available when status is `finished`)
+  
+  <ResponseField name="result.relations" type="array">
+    List of discovered relations between object classes
+    
+    <ResponseField name="result.relations[].name" type="string">
+      Human-readable name of the relation (e.g., "User to Group", "Account to User")
+    </ResponseField>
+    
+    <ResponseField name="result.relations[].shortDescription" type="string">
+      Short description or summary of the relationship
+    </ResponseField>
+    
+    <ResponseField name="result.relations[].subject" type="string">
+      Normalized lowercase name of the subject class (owner of the attribute)
+    </ResponseField>
+    
+    <ResponseField name="result.relations[].subjectAttribute" type="string">
+      Exact property name on the subject that establishes the relation
+    </ResponseField>
+    
+    <ResponseField name="result.relations[].object" type="string">
+      Normalized lowercase name of the object class being referenced
+    </ResponseField>
+    
+    <ResponseField name="result.relations[].objectAttribute" type="string">
+      Exact back-reference property name on the object class (if documented)
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/relations?jobId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "relations": [
+      {
+        "name": "User to Groups",
+        "shortDescription": "A user can belong to multiple groups for access control",
+        "subject": "user",
+        "subjectAttribute": "groups",
+        "object": "group",
+        "objectAttribute": "members"
+      },
+      {
+        "name": "User to Roles",
+        "shortDescription": "A user can have multiple roles assigned",
+        "subject": "user",
+        "subjectAttribute": "roles",
+        "object": "role",
+        "objectAttribute": "users"
+      },
+      {
+        "name": "Group to Parent Group",
+        "shortDescription": "A group can have a parent group for hierarchical organization",
+        "subject": "group",
+        "subjectAttribute": "parentGroup",
+        "object": "group",
+        "objectAttribute": "childGroups"
+      },
+      {
+        "name": "Role to Permissions",
+        "shortDescription": "A role defines a set of permissions",
+        "subject": "role",
+        "subjectAttribute": "permissions",
+        "object": "permission",
+        "objectAttribute": ""
+      },
+      {
+        "name": "User to Manager",
+        "shortDescription": "A user can have a manager who is also a user",
+        "subject": "user",
+        "subjectAttribute": "manager",
+        "object": "user",
+        "objectAttribute": "directReports"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Override Relations
+
+<api method="PUT" path="/digester/{session_id}/relations" />
+
+Manually override the relations data for the session.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField body="relations" type="object" required>
+  Relations data as JSON object
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  Session ID
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/relations" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "relations": [
+      {
+        "name": "User to Groups",
+        "shortDescription": "User membership in groups",
+        "subject": "user",
+        "subjectAttribute": "groups",
+        "object": "group",
+        "objectAttribute": "members"
+      }
+    ]
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "message": "Relations overridden successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+## Relation Types
+
+Relations can represent various types of relationships:
+
+- **One-to-Many**: User has many Groups
+- **Many-to-Many**: Users have many Roles, Roles have many Users
+- **Self-referential**: User has a Manager (also a User), Group has Parent Group
+- **Embedded**: User has Profile (embedded object, not a separate class)
+
+## Understanding Subject and Object
+
+In each relation:
+
+- **Subject**: The "owner" of the relationship - the class that has the attribute
+- **Object**: The "target" of the relationship - the class being referenced
+
+Example: In "User to Groups"
+- Subject: `user` (has the `groups` attribute)
+- Object: `group` (is referenced by the `groups` attribute)
+
+## Error Responses
+
+<ResponseField name="status_code" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+### Common Errors
+
+**404 Not Found** - No object classes found in session
+```json
+{
+  "detail": "No object classes found in session. Please run /classes endpoint first."
+}
+```

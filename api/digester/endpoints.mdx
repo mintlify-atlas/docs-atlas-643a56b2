@@ -1,0 +1,309 @@
+---
+title: 'Extract API Endpoints'
+description: 'Extract API endpoints for a specific object class'
+api: 'POST /digester/{session_id}/classes/{object_class}/endpoints'
+---
+
+Extract API endpoints (CRUD operations, lifecycle methods, etc.) for a specific object class. Automatically loads the base API URL from session metadata if available.
+
+<Note>
+  You must extract object classes first using `/classes` endpoint before extracting endpoints.
+</Note>
+
+## Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name (e.g., "User", "Group"). Case-insensitive.
+</ParamField>
+
+<ParamField query="use_previous_session_data" type="boolean" default="true">
+  Whether to use previous session data if available
+</ParamField>
+
+## Response
+
+Returns a job ID to poll for results.
+
+<ResponseField name="jobId" type="string">
+  Job ID (UUID) to track extraction progress
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User/endpoints" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "jobId": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+---
+
+## Get Endpoints Status
+
+<api method="GET" path="/digester/{session_id}/classes/{object_class}/endpoints" />
+
+Get the status and results of the endpoints extraction job.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name
+</ParamField>
+
+<ParamField query="jobId" type="string">
+  Job ID (optional, will use session's job if not provided)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Job status: `pending`, `running`, `finished`, or `failed`
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Extraction results (available when status is `finished`)
+  
+  <ResponseField name="result.endpoints" type="array">
+    List of HTTP endpoints related to the object class
+    
+    <ResponseField name="result.endpoints[].path" type="string">
+      Concrete URL path template (e.g., `/users/{id}`, `/users/{id}/groups`)
+    </ResponseField>
+    
+    <ResponseField name="result.endpoints[].method" type="string">
+      HTTP method in uppercase: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`
+    </ResponseField>
+    
+    <ResponseField name="result.endpoints[].description" type="string">
+      Short summary of what this method does for the object class
+    </ResponseField>
+    
+    <ResponseField name="result.endpoints[].responseContentType" type="string">
+      Primary response media type (e.g., `application/json`, `application/hal+json`)
+    </ResponseField>
+    
+    <ResponseField name="result.endpoints[].requestContentType" type="string">
+      Primary request media type (often for POST/PUT/PATCH)
+    </ResponseField>
+    
+    <ResponseField name="result.endpoints[].suggestedUse" type="array">
+      List of suggested use-cases: `create`, `update`, `delete`, `getById`, `getAll`, `search`, `activate`, `deactivate`, etc.
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User/endpoints?jobId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "endpoints": [
+      {
+        "path": "/users",
+        "method": "GET",
+        "description": "List all users with optional filtering",
+        "responseContentType": "application/json",
+        "requestContentType": null,
+        "suggestedUse": ["getAll", "search"]
+      },
+      {
+        "path": "/users",
+        "method": "POST",
+        "description": "Create a new user",
+        "responseContentType": "application/json",
+        "requestContentType": "application/json",
+        "suggestedUse": ["create"]
+      },
+      {
+        "path": "/users/{id}",
+        "method": "GET",
+        "description": "Get user by ID",
+        "responseContentType": "application/json",
+        "requestContentType": null,
+        "suggestedUse": ["getById"]
+      },
+      {
+        "path": "/users/{id}",
+        "method": "PUT",
+        "description": "Update user by ID",
+        "responseContentType": "application/json",
+        "requestContentType": "application/json",
+        "suggestedUse": ["update"]
+      },
+      {
+        "path": "/users/{id}",
+        "method": "PATCH",
+        "description": "Partially update user by ID",
+        "responseContentType": "application/json",
+        "requestContentType": "application/json",
+        "suggestedUse": ["update"]
+      },
+      {
+        "path": "/users/{id}",
+        "method": "DELETE",
+        "description": "Delete user by ID",
+        "responseContentType": null,
+        "requestContentType": null,
+        "suggestedUse": ["delete"]
+      },
+      {
+        "path": "/users/{id}/activate",
+        "method": "POST",
+        "description": "Activate a user account",
+        "responseContentType": "application/json",
+        "requestContentType": null,
+        "suggestedUse": ["activate"]
+      },
+      {
+        "path": "/users/{id}/deactivate",
+        "method": "POST",
+        "description": "Deactivate a user account",
+        "responseContentType": "application/json",
+        "requestContentType": null,
+        "suggestedUse": ["deactivate"]
+      },
+      {
+        "path": "/users/{id}/groups",
+        "method": "GET",
+        "description": "Get groups for a specific user",
+        "responseContentType": "application/json",
+        "requestContentType": null,
+        "suggestedUse": ["getAll"]
+      },
+      {
+        "path": "/users/{userId}/groups/{groupId}",
+        "method": "PUT",
+        "description": "Add user to a group",
+        "responseContentType": null,
+        "requestContentType": null,
+        "suggestedUse": ["create"]
+      }
+    ]
+  }
+}
+```
+
+---
+
+## Override Endpoints
+
+<api method="PUT" path="/digester/{session_id}/classes/{object_class}/endpoints" />
+
+Manually override the endpoints for an object class.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  Object class name (will be normalized to lowercase)
+</ParamField>
+
+<ParamField body="endpoints" type="object" required>
+  Endpoints data as JSON object
+</ParamField>
+
+### Response
+
+<ResponseField name="message" type="string">
+  Success message
+</ResponseField>
+
+<ResponseField name="sessionId" type="string">
+  Session ID
+</ResponseField>
+
+<ResponseField name="objectClass" type="string">
+  Object class name (normalized)
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X PUT "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/classes/User/endpoints" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "endpoints": [
+      {
+        "path": "/users/{id}",
+        "method": "GET",
+        "description": "Get user by ID",
+        "suggestedUse": ["getById"]
+      }
+    ]
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "message": "Endpoints for user overridden successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "objectClass": "user"
+}
+```
+
+## Base API URL
+
+The endpoint extraction automatically loads the base API URL from session metadata if it has been extracted using the `/metadata` endpoint. This allows for complete endpoint URLs to be constructed.
+
+```json
+{
+  "baseApiUrl": "https://api.example.com/v1"
+}
+```
+
+The base URL is combined with the endpoint path to provide complete API endpoint information.
+
+## Error Responses
+
+<ResponseField name="status_code" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+### Common Errors
+
+**404 Not Found** - Object class not found or no object classes in session
+```json
+{
+  "detail": "No object classes found in session. Please run /classes endpoint first."
+}
+```
+
+**400 Bad Request** - No relevant chunks found for the object class
+```json
+{
+  "detail": "No relevant chunks found for object class 'User'. Cannot extract endpoints."
+}
+```

@@ -1,0 +1,73 @@
+---
+title: "Create Session"
+api: "POST /api/v1/session"
+description: "Create a new session and return the session ID"
+---
+
+## Overview
+
+Creates a new session with an automatically generated UUID. Sessions are used to track the state of connector generation workflows, including discovery, scraping, and documentation processing.
+
+## Request
+
+No request body is required. The session ID is automatically generated.
+
+## Response
+
+<ResponseField name="sessionId" type="string (UUID)" required>
+  The unique identifier for the created session
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Confirmation message about the session creation
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "message": "Session created successfully. Use this session_id in subsequent requests."
+}
+```
+
+## Status Codes
+
+<ResponseField name="201" type="Created">
+  Session created successfully
+</ResponseField>
+
+<ResponseField name="500" type="Internal Server Error">
+  Unable to create session due to server error
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST https://api.example.com/api/v1/session \
+  -H "Content-Type: application/json"
+```
+
+## Usage Notes
+
+- The session ID must be used in subsequent API calls to maintain state
+- Sessions store workflow data including discovery input, scrape results, and documentation
+- Use the returned `sessionId` in path parameters for other session endpoints
+
+## Error Responses
+
+### 500 Internal Server Error
+
+```json
+{
+  "detail": "Unable to create session"
+}
+```
+
+This error occurs when the database operation fails during session creation.
+
+## Related Endpoints
+
+- [Get Session](/api/sessions/get) - Retrieve session data
+- [Update Session](/api/sessions/get) - Update session data
+- [Delete Session](/api/sessions/get) - Delete a session

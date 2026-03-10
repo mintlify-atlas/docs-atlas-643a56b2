@@ -1,80 +1,334 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Generate your first connector in minutes'
+icon: 'rocket'
 ---
 
-## Get started in three steps
+This guide walks you through generating a complete connector from API documentation. You'll learn the end-to-end workflow from creating a session to generating Groovy code.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, ensure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- Access to the midPilot Connector Generator API (default: `http://localhost:8090`)
+- API documentation for your target system (URL or file)
+- Basic understanding of REST APIs
 
-### Step 2: Deploy your changes
+## Complete Workflow
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Step title="Create a Session">
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+Every connector generation starts with a session. Sessions store all your work including documentation, extracted schemas, and generated code.
 
-### Step 3: Go live
+```bash
+curl -X POST http://localhost:8090/api/v1/session \
+  -H "Content-Type: application/json"
+```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+**Response:**
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Session created successfully. Use this session_id in subsequent requests."
+}
+```
 
-## Next steps
+<Tip>Save the `sessionId` - you'll use it in all subsequent requests.</Tip>
 
-Now that you have your docs running, explore these key features:
+</Step>
 
-<CardGroup cols={2}>
+<Step title="Upload or Scrape Documentation">
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+You can either upload documentation files or scrape from URLs.
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+<CodeGroup>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+```bash Upload Documentation
+curl -X POST http://localhost:8090/api/v1/session/{sessionId}/documentation \
+  -H "Content-Type: multipart/form-data" \
+  -F "documentation=@openapi.yaml"
+```
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+```bash Scrape Documentation
+curl -X POST http://localhost:8090/api/v1/scrape/{sessionId}/scrape \
+  -H "Content-Type: application/json" \
+  -d '{
+    "applicationName": "MyApp",
+    "applicationVersion": "v1",
+    "candidateLinks": [
+      "https://api.example.com/docs"
+    ]
+  }'
+```
 
-</CardGroup>
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+Documentation processing happens asynchronously. The system chunks, processes, and analyzes the documentation using LLMs. Check the job status to know when it's ready.
 </Note>
+
+</Step>
+
+<Step title="Extract Object Classes">
+
+Identify the main object types (User, Group, etc.) in your API.
+
+```bash
+curl -X POST http://localhost:8090/api/v1/digester/{sessionId}/classes
+```
+
+**Response:**
+```json
+{
+  "jobId": "8d7f5689-8536-51ef-b05c-f18ed2g01bf8"
+}
+```
+
+Check the status and retrieve results:
+
+```bash
+curl http://localhost:8090/api/v1/digester/{sessionId}/classes?jobId={jobId}
+```
+
+**Example Result:**
+```json
+{
+  "status": "finished",
+  "result": {
+    "objectClasses": [
+      {
+        "name": "User",
+        "description": "User account object",
+        "relevant": true,
+        "relevantChunks": [
+          {"docUuid": "abc-123"}
+        ]
+      },
+      {
+        "name": "Group",
+        "description": "Group object for managing permissions",
+        "relevant": true,
+        "relevantChunks": [
+          {"docUuid": "def-456"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+</Step>
+
+<Step title="Extract Attributes and Endpoints">
+
+For each object class, extract its attributes and API endpoints.
+
+<CodeGroup>
+
+```bash Extract Attributes
+curl -X POST http://localhost:8090/api/v1/digester/{sessionId}/classes/User/attributes
+```
+
+```bash Extract Endpoints
+curl -X POST http://localhost:8090/api/v1/digester/{sessionId}/classes/User/endpoints
+```
+
+</CodeGroup>
+
+**Attributes Response:**
+```json
+{
+  "status": "finished",
+  "result": {
+    "attributes": {
+      "id": {
+        "type": "string",
+        "required": true,
+        "readOnly": false,
+        "multivalued": false
+      },
+      "username": {
+        "type": "string",
+        "required": true,
+        "readOnly": false,
+        "multivalued": false
+      },
+      "email": {
+        "type": "string",
+        "required": true,
+        "readOnly": false,
+        "multivalued": false
+      }
+    }
+  }
+}
+```
+
+**Endpoints Response:**
+```json
+{
+  "status": "finished",
+  "result": {
+    "endpoints": [
+      {
+        "operation": "list",
+        "method": "GET",
+        "path": "/api/v1/users",
+        "description": "List all users"
+      },
+      {
+        "operation": "get",
+        "method": "GET",
+        "path": "/api/v1/users/{id}",
+        "description": "Get user by ID"
+      },
+      {
+        "operation": "create",
+        "method": "POST",
+        "path": "/api/v1/users",
+        "description": "Create a new user"
+      }
+    ]
+  }
+}
+```
+
+</Step>
+
+<Step title="Generate Connector Code">
+
+Generate Groovy connector code for CRUD operations.
+
+<CodeGroup>
+
+```bash Search Operation
+curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/User/search/all
+```
+
+```bash Create Operation
+curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/User/create
+```
+
+```bash Update Operation
+curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/User/update
+```
+
+```bash Delete Operation
+curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/User/delete
+```
+
+</CodeGroup>
+
+**Generated Code Example:**
+```groovy
+// Search/List Users
+def users = []
+def response = httpClient.get("/api/v1/users")
+response.data.each { user ->
+    users.add([
+        __UID__: user.id,
+        __NAME__: user.username,
+        email: user.email
+    ])
+}
+return users
+```
+
+</Step>
+
+<Step title="Generate Native Schema and ConnID">
+
+Create the native schema definition and ConnID mappings.
+
+<CodeGroup>
+
+```bash Native Schema
+curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/User/native-schema
+```
+
+```bash ConnID Mapping
+curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/User/connid
+```
+
+</CodeGroup>
+
+</Step>
+
+</Steps>
+
+## Checking Job Status
+
+All extraction and generation operations are asynchronous. Monitor job progress:
+
+```bash
+curl http://localhost:8090/api/v1/digester/{sessionId}/classes?jobId={jobId}
+```
+
+**Status Values:**
+- `queued` - Job is waiting to be processed
+- `running` - Job is currently executing
+- `finished` - Job completed successfully
+- `failed` - Job encountered an error
+
+## What's Next?
+
+<CardGroup cols={2}>
+  <Card title="Architecture Overview" icon="diagram-project" href="/architecture">
+    Understand the system components and how they work together
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/sessions/create">
+    Explore all available API endpoints
+  </Card>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure LLM providers and system settings
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/workflow">
+    Learn about sessions, workflows, and job tracking
+  </Card>
+</CardGroup>
+
+## Common Patterns
+
+### Processing Multiple Object Classes
+
+```bash
+# 1. Extract all classes
+curl -X POST http://localhost:8090/api/v1/digester/{sessionId}/classes
+
+# 2. For each relevant class, extract details
+for class in User Group Role; do
+  curl -X POST http://localhost:8090/api/v1/digester/{sessionId}/classes/$class/attributes
+  curl -X POST http://localhost:8090/api/v1/digester/{sessionId}/classes/$class/endpoints
+done
+
+# 3. Generate code for each class
+for class in User Group Role; do
+  curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/$class/search/all
+  curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/$class/create
+  curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/$class/update
+  curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/classes/$class/delete
+done
+```
+
+### Handling Relations
+
+```bash
+# Extract relations between object classes
+curl -X POST http://localhost:8090/api/v1/digester/{sessionId}/relations
+
+# Generate relation code
+curl -X POST http://localhost:8090/api/v1/codegen/{sessionId}/relations/UserGroupMembership
+```
+
+<Warning>
+Always wait for jobs to complete before requesting dependent operations. For example, attributes and endpoints extraction requires object classes to be extracted first.
+</Warning>

@@ -1,0 +1,254 @@
+---
+title: "Generate Delete Code"
+api: "POST /api/v1/session/{session_id}/classes/{object_class}/delete"
+description: "Generate Groovy delete code for removing objects from the target system"
+---
+
+## Overview
+
+Generates Groovy delete operation code for the specified object class. This endpoint creates code that handles deleting objects from the target system, including UID validation, API request construction, and error handling.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  The name of the object class (e.g., "account", "user", "group")
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="usePreviousSessionData" type="boolean" default="true">
+  Whether to use previous session data for generation. Set to `false` to force regeneration from scratch.
+</ParamField>
+
+## Request
+
+No request body is required. The endpoint automatically loads:
+- Attributes from session data
+- Endpoints from session data
+- Relevant documentation chunks for the delete operation
+
+## Response
+
+<ResponseField name="jobId" type="string (UUID)" required>
+  The unique identifier for the created code generation job
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "jobId": "f6a7b8c9-d0e1-2345-f012-456789012345"
+}
+```
+
+## Prerequisites
+
+Before calling this endpoint, you must:
+
+1. Create a session using `POST /api/v1/session`
+2. Generate attributes using `POST /api/v1/session/{session_id}/classes/{object_class}/attributes`
+3. Generate endpoints using `POST /api/v1/session/{session_id}/classes/{object_class}/endpoints`
+
+If attributes or endpoints are not found in the session, the endpoint returns a 404 error.
+
+## Status Codes
+
+<ResponseField name="200" type="OK">
+  Job created successfully
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session not found, attributes not available, or endpoints not available
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/delete?usePreviousSessionData=true" \
+  -H "Content-Type: application/json"
+```
+
+## Checking Job Status
+
+After creating the job, use the GET endpoint to check the generation status. This endpoint returns multi-document progress tracking:
+
+<CodeGroup>
+```bash cURL
+curl "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/delete?jobId=f6a7b8c9-d0e1-2345-f012-456789012345"
+```
+</CodeGroup>
+
+### Status Response
+
+```json
+{
+  "jobId": "f6a7b8c9-d0e1-2345-f012-456789012345",
+  "status": "running",
+  "createdAt": "2026-03-10T12:05:00Z",
+  "startedAt": "2026-03-10T12:05:01Z",
+  "updatedAt": "2026-03-10T12:05:18Z",
+  "progress": {
+    "stage": "generating",
+    "message": "Processing documentation chunks",
+    "processedDocuments": 4,
+    "totalDocuments": 7
+  }
+}
+```
+
+### Completed Job Response
+
+```json
+{
+  "jobId": "f6a7b8c9-d0e1-2345-f012-456789012345",
+  "status": "finished",
+  "createdAt": "2026-03-10T12:05:00Z",
+  "startedAt": "2026-03-10T12:05:01Z",
+  "updatedAt": "2026-03-10T12:05:55Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Delete code generated successfully",
+    "processedDocuments": 7,
+    "totalDocuments": 7
+  },
+  "result": {
+    "code": "// Generated delete Groovy code\n..."
+  }
+}
+```
+
+## Manually Override Delete Code
+
+You can manually override the generated delete code using the PUT endpoint:
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/delete" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "// Custom delete Groovy code\n..."
+  }'
+```
+</CodeGroup>
+
+### Override Response
+
+```json
+{
+  "message": "Delete code for account overridden successfully",
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "objectClass": "account"
+}
+```
+
+## Generated Code Structure
+
+The generated delete code typically includes:
+
+- UID validation
+- API endpoint construction
+- DELETE request execution
+- Response validation
+- Error handling (404 for not found, etc.)
+- Idempotent deletion support
+- Soft vs. hard delete handling
+
+Example generated delete code:
+
+```groovy
+def deleteAccount(ObjectClass objectClass, Uid uid, OperationOptions options) {
+    log.info("Deleting account with UID: {0}", uid.uidValue)
+    
+    // Validate UID
+    if (!uid?.uidValue) {
+        throw new InvalidAttributeValueException("UID is required for delete")
+    }
+    
+    try {
+        // Execute DELETE request
+        def response = connection.delete("/api/users/${uid.uidValue}")
+        
+        log.info("Successfully deleted account {0}", uid.uidValue)
+        
+    } catch (ResourceNotFoundException e) {
+        // Handle case where object doesn't exist
+        // Deletion is idempotent - already deleted is success
+        log.warn("Account {0} not found, may have been already deleted", uid.uidValue)
+        
+    } catch (Exception e) {
+        log.error("Failed to delete account {0}: {1}", uid.uidValue, e.message)
+        throw new ConnectorException("Failed to delete account: ${e.message}", e)
+    }
+}
+```
+
+## Delete Operation Patterns
+
+The generated code handles common deletion patterns:
+
+- **Hard delete**: Permanently removes the object from the system
+- **Soft delete**: Marks the object as inactive/deleted without removing it
+- **Cascade delete**: Handles related objects when deleting parent objects
+- **Idempotent deletion**: Treats "already deleted" as success
+- **404 handling**: Gracefully handles deletion of non-existent objects
+
+## Multi-Document Processing
+
+Delete code generation processes multiple documentation chunks to ensure comprehensive coverage:
+
+- **processedDocuments**: Number of documentation chunks analyzed
+- **totalDocuments**: Total number of relevant chunks for this operation
+- Progress updates occur as each chunk is processed
+
+## Soft Delete vs. Hard Delete
+
+Some APIs support both soft and hard deletion:
+
+```groovy
+// Soft delete - deactivate account
+def payload = [active: false]
+connection.patch("/api/users/${uid.uidValue}", new JsonBuilder(payload).toString())
+
+// Hard delete - permanently remove
+connection.delete("/api/users/${uid.uidValue}")
+```
+
+The generated code automatically detects which approach is appropriate based on the API documentation.
+
+## Error Responses
+
+### 404 Not Found - Session Not Found
+
+```json
+{
+  "detail": "Session with ID 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+### 404 Not Found - Attributes Not Available
+
+```json
+{
+  "detail": "No attributes found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/attributes endpoint first."
+}
+```
+
+### 404 Not Found - Endpoints Not Available
+
+```json
+{
+  "detail": "No endpoints found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/endpoints endpoint first."
+}
+```
+
+## Related Endpoints
+
+- [Generate Attributes](/api/digester/attributes) - Generate attributes (prerequisite)
+- [Generate Endpoints](/api/digester/endpoints) - Generate endpoints (prerequisite)
+- [Generate Search Code](/api/codegen/search) - Generate search operation code
+- [Generate Create Code](/api/codegen/create) - Generate create operation code
+- [Generate Update Code](/api/codegen/update) - Generate update operation code

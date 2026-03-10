@@ -1,0 +1,170 @@
+---
+title: "Generate Native Schema"
+api: "POST /api/v1/session/{session_id}/classes/{object_class}/native-schema"
+description: "Generate native Groovy schema from attributes for an object class"
+---
+
+## Overview
+
+Generates native Groovy schema code from attributes for the specified object class. This endpoint automatically loads attributes from the session and uses AI to generate the appropriate schema structure.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  The name of the object class (e.g., "account", "user", "group")
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="usePreviousSessionData" type="boolean" default="true">
+  Whether to use previous session data for generation. Set to `false` to force regeneration from scratch.
+</ParamField>
+
+## Request
+
+No request body is required. The endpoint automatically loads attributes from the session data.
+
+## Response
+
+<ResponseField name="jobId" type="string (UUID)" required>
+  The unique identifier for the created code generation job
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "jobId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+## Prerequisites
+
+Before calling this endpoint, you must:
+
+1. Create a session using `POST /api/v1/session`
+2. Generate attributes for the object class using `POST /api/v1/session/{session_id}/classes/{object_class}/attributes`
+
+If attributes are not found in the session, the endpoint returns a 404 error.
+
+## Status Codes
+
+<ResponseField name="200" type="OK">
+  Job created successfully
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session not found or attributes not available for the object class
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/native-schema?usePreviousSessionData=true" \
+  -H "Content-Type: application/json"
+```
+
+## Checking Job Status
+
+After creating the job, use the GET endpoint to check the generation status:
+
+<CodeGroup>
+```bash cURL
+curl "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/native-schema?jobId=a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+```
+</CodeGroup>
+
+### Status Response
+
+```json
+{
+  "jobId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "finished",
+  "createdAt": "2026-03-10T12:00:00Z",
+  "startedAt": "2026-03-10T12:00:01Z",
+  "updatedAt": "2026-03-10T12:00:45Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Native schema generated successfully"
+  },
+  "result": {
+    "code": "// Generated Groovy schema code\n..."
+  }
+}
+```
+
+## Manually Override Schema
+
+You can manually override the generated schema using the PUT endpoint:
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/native-schema" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "// Custom Groovy schema code\n..."
+  }'
+```
+</CodeGroup>
+
+### Override Response
+
+```json
+{
+  "message": "Native schema for account overridden successfully",
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "objectClass": "account"
+}
+```
+
+## Generated Code Structure
+
+The generated native schema typically includes:
+
+- Object class definition in Groovy
+- Attribute declarations with proper types
+- Schema builder pattern implementation
+- Field mappings and transformations
+
+Example generated schema:
+
+```groovy
+objectClass {
+    type ObjectClass.ACCOUNT_NAME
+    attributes {
+        uid required: true
+        name()
+        email multivalued: false
+        active type: boolean
+        groups multivalued: true
+    }
+}
+```
+
+## Error Responses
+
+### 404 Not Found - Session Not Found
+
+```json
+{
+  "detail": "Session with ID 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+### 404 Not Found - Attributes Not Available
+
+```json
+{
+  "detail": "No attributes found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/attributes endpoint first."
+}
+```
+
+## Related Endpoints
+
+- [Generate Attributes](/api/digester/attributes) - Generate attributes for the object class (prerequisite)
+- [Generate ConnID](/api/codegen/connid) - Generate ConnID code
+- [Get Session](/api/sessions/get) - Retrieve session data

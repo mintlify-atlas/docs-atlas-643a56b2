@@ -1,0 +1,333 @@
+---
+title: Configuration
+description: Configure the midPilot Connector Generator with environment variables
+---
+
+The midPilot Connector Generator uses environment variables for configuration. All settings are defined in `src/config.py` and can be overridden using a `.env` file or environment variables.
+
+## Configuration File Setup
+
+<Steps>
+  <Step title="Copy the example configuration">
+    ```bash
+    cp .env-example .env
+    ```
+  </Step>
+
+  <Step title="Edit the configuration">
+    Open `.env` in your editor and configure the required variables:
+    ```bash
+    nano .env
+    # or
+    vim .env
+    ```
+  </Step>
+
+  <Step title="For testing environments">
+    Create a separate test configuration:
+    ```bash
+    cp .env.test-example .env.test
+    ```
+  </Step>
+</Steps>
+
+## Environment Variable Naming
+
+Configuration uses nested environment variables with double underscore (`__`) delimiter:
+
+<CodeGroup>
+```bash Example
+# Pattern: SECTION__PARAMETER=value
+APP__TITLE="My Custom Title"
+LOGGING__LEVEL=debug
+DATABASE__HOST=localhost
+DATABASE__PORT=5432
+```
+
+```python Config Structure
+# This maps to:
+config.app.title = "My Custom Title"
+config.logging.level = "debug"
+config.database.host = "localhost"
+config.database.port = 5432
+```
+</CodeGroup>
+
+## Core Configuration Sections
+
+### Application Settings
+
+Configure the FastAPI application and Uvicorn server:
+
+```bash
+# Application metadata
+APP__TITLE="Smart Integration Microservice (DEV)"
+APP__VERSION="0.1.0"
+APP__DESCRIPTION="Smart Integration Microservice for scraping, digester and CodeGen"
+
+# Server configuration
+APP__HOST=0.0.0.0
+APP__PORT=8090
+APP__LIVE_RELOAD=true
+APP__WORKERS=1
+
+# Proxy and forwarding
+APP__PROXY_HEADERS=true
+APP__FORWARDED_ALLOW_IPS=*
+
+# Timeouts
+APP__TIMEOUT_KEEP_ALIVE=10
+APP__TIMEOUT_GRACEFUL_SHUTDOWN=15
+```
+
+<ParamField path="APP__TITLE" type="string" default="Smart Integration Microservice">
+  API title displayed in documentation
+</ParamField>
+
+<ParamField path="APP__PORT" type="integer" default="8090">
+  Port number for the API server
+</ParamField>
+
+<ParamField path="APP__LIVE_RELOAD" type="boolean" default="false">
+  Enable hot reload during development
+</ParamField>
+
+<ParamField path="APP__WORKERS" type="integer" default="1">
+  Number of Uvicorn worker processes
+</ParamField>
+
+### Logging Configuration
+
+Control logging behavior and verbosity:
+
+```bash
+LOGGING__LEVEL=info
+LOGGING__ACCESS_LOG=true
+LOGGING__COLORS=true
+```
+
+<ParamField path="LOGGING__LEVEL" type="enum" default="info">
+  Log level: `debug`, `info`, `warning`, `error`, or `critical`
+</ParamField>
+
+<ParamField path="LOGGING__ACCESS_LOG" type="boolean" default="true">
+  Enable HTTP access logs
+</ParamField>
+
+<ParamField path="LOGGING__COLORS" type="boolean" default="false">
+  Enable colored log output (useful for development)
+</ParamField>
+
+### Database Configuration
+
+Configure PostgreSQL database connection:
+
+```bash
+# Individual connection parameters
+DATABASE__HOST=localhost
+DATABASE__PORT=5432
+DATABASE__NAME=db
+DATABASE__USER=user
+DATABASE__PASSWORD=password
+
+# Full connection URL (auto-constructed if not provided)
+DATABASE__URL=postgresql+asyncpg://${DATABASE__USER}:${DATABASE__PASSWORD}@${DATABASE__HOST}:${DATABASE__PORT}/${DATABASE__NAME}
+
+# Connection pool settings
+DATABASE__POOL_SIZE=10
+DATABASE__MAX_OVERFLOW=20
+DATABASE__ECHO=false
+```
+
+<ParamField path="DATABASE__HOST" type="string" default="">
+  Database server hostname or IP address
+</ParamField>
+
+<ParamField path="DATABASE__PORT" type="integer" default="5432">
+  PostgreSQL port number
+</ParamField>
+
+<ParamField path="DATABASE__NAME" type="string" default="" required>
+  Database name
+</ParamField>
+
+<ParamField path="DATABASE__USER" type="string" default="" required>
+  Database username
+</ParamField>
+
+<ParamField path="DATABASE__PASSWORD" type="string" default="" required>
+  Database password
+</ParamField>
+
+<ParamField path="DATABASE__URL" type="string" optional>
+  Full database connection URL. If not provided, it's auto-constructed from individual parameters.
+</ParamField>
+
+<ParamField path="DATABASE__POOL_SIZE" type="integer" default="10">
+  SQLAlchemy connection pool size
+</ParamField>
+
+<ParamField path="DATABASE__MAX_OVERFLOW" type="integer" default="20">
+  Maximum overflow connections beyond pool_size
+</ParamField>
+
+<ParamField path="DATABASE__ECHO" type="boolean" default="false">
+  Enable SQL query logging (useful for debugging)
+</ParamField>
+
+### LLM Configuration
+
+Configure OpenAI-compatible LLM providers:
+
+```bash
+# Primary LLM
+LLM__OPENAI_API_KEY=your-api-key-here
+LLM__OPENAI_API_BASE=https://openrouter.ai/api/v1
+LLM__MODEL_NAME=openai/gpt-oss-20b
+LLM__REQUEST_TIMEOUT=120
+
+# Alternative LLM models
+LLM_SMALL1__OPENAI_API_KEY=your-api-key-here
+LLM_SMALL2__OPENAI_API_KEY=your-api-key-here
+EMBEDDINGS__OPENAI_API_KEY=your-api-key-here
+```
+
+<ParamField path="LLM__OPENAI_API_KEY" type="string" default="" required>
+  API key for OpenAI-compatible service (e.g., OpenRouter, vLLM)
+</ParamField>
+
+<ParamField path="LLM__OPENAI_API_BASE" type="string" default="https://openrouter.ai/api/v1">
+  Base URL for the LLM API endpoint
+</ParamField>
+
+<ParamField path="LLM__MODEL_NAME" type="string" default="openai/gpt-oss-20b">
+  Model identifier to use for requests
+</ParamField>
+
+<ParamField path="LLM__REQUEST_TIMEOUT" type="integer" default="120">
+  Request timeout in seconds
+</ParamField>
+
+### Langfuse Tracing
+
+Configure Langfuse for LLM observability and tracing:
+
+```bash
+LANGFUSE__HOST=https://cloud.langfuse.com
+LANGFUSE__SECRET_KEY=sk-lf-...
+LANGFUSE__PUBLIC_KEY=pk-lf-...
+LANGFUSE__TRACING_ENABLED=true
+LANGFUSE__ENVIRONMENT=dev-myname
+```
+
+<ParamField path="LANGFUSE__TRACING_ENABLED" type="boolean" default="false">
+  Enable/disable Langfuse tracing
+</ParamField>
+
+<ParamField path="LANGFUSE__SECRET_KEY" type="string" default="emptykey">
+  Langfuse project secret key
+</ParamField>
+
+<ParamField path="LANGFUSE__PUBLIC_KEY" type="string" default="emptykey">
+  Langfuse project public key
+</ParamField>
+
+<ParamField path="LANGFUSE__HOST" type="string" default="">
+  Langfuse host URL
+</ParamField>
+
+<ParamField path="LANGFUSE__ENVIRONMENT" type="string" default="dev-whoami">
+  Environment identifier for traces (e.g., dev-john, staging, production)
+</ParamField>
+
+### Search Configuration
+
+Configure web search capabilities:
+
+```bash
+SEARCH__METHOD_NAME=ddgs
+
+# Brave Search (alternative)
+BRAVE__API_KEY=your-brave-api-key
+BRAVE__ENDPOINT=https://api.search.brave.com/res/v1/web/search
+```
+
+<ParamField path="SEARCH__METHOD_NAME" type="string" default="">
+  Search method: `ddgs` (DuckDuckGo) or `brave`
+</ParamField>
+
+<ParamField path="BRAVE__API_KEY" type="string" default="">
+  Brave Search API key (required if using Brave)
+</ParamField>
+
+### Scrape and Process Settings
+
+Configure web scraping and content processing:
+
+```bash
+# Scraper controls
+SCRAPE_AND_PROCESS__MAX_SCRAPER_ITERATIONS=4
+SCRAPE_AND_PROCESS__MAX_ITERATIONS_FILTER_IRRELEVANT=5
+
+# Chunking controls
+SCRAPE_AND_PROCESS__CHUNK_LENGTH=20000
+SCRAPE_AND_PROCESS__MAX_CONCURRENT=20
+
+# Metadata thresholds
+SCRAPE_AND_PROCESS__UNKNOWN_VERSION_THRESHOLD=0.9
+SCRAPE_AND_PROCESS__METADATA_UNCERTAINTY_THRESHOLD=0.05
+```
+
+<ParamField path="SCRAPE_AND_PROCESS__MAX_SCRAPER_ITERATIONS" type="integer" default="4">
+  Maximum outer iterations of the scraper loop
+</ParamField>
+
+<ParamField path="SCRAPE_AND_PROCESS__CHUNK_LENGTH" type="integer" default="20000">
+  Maximum tokens per chunk for LLM processing
+</ParamField>
+
+<ParamField path="SCRAPE_AND_PROCESS__MAX_CONCURRENT" type="integer" default="20">
+  Maximum concurrent chunk processing tasks
+</ParamField>
+
+## Configuration Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use .env for local development" icon="laptop-code">
+    Keep local settings in `.env` (git-ignored)
+  </Card>
+  <Card title="Use environment variables in production" icon="server">
+    Set environment variables directly in Docker/Kubernetes
+  </Card>
+  <Card title="Never commit secrets" icon="lock">
+    Keep API keys and passwords out of version control
+  </Card>
+  <Card title="Document custom settings" icon="book">
+    Add comments to your `.env` file for team clarity
+  </Card>
+</CardGroup>
+
+## Validation and Loading
+
+The configuration is validated on application startup using Pydantic. If required fields are missing or invalid, the application will fail to start with a clear error message:
+
+```bash
+pydantic_core._pydantic_core.ValidationError: 1 validation error for Settings
+database.user
+  Field required [type=missing, input_value={}, input_type=dict]
+```
+
+## Viewing Current Configuration
+
+To inspect the current configuration at runtime, access the `/health` endpoint or check application logs during startup.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="/guides/database-setup">
+    Configure and initialize PostgreSQL
+  </Card>
+  <Card title="Docker Setup" icon="docker" href="/guides/docker-setup">
+    Deploy with Docker Compose
+  </Card>
+</CardGroup>

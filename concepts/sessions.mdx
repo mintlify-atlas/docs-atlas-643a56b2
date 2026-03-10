@@ -1,0 +1,323 @@
+---
+title: 'Sessions'
+description: 'Understand session management and lifecycle in the Connector Generator'
+---
+
+## Overview
+
+Sessions are the foundational concept in the midPilot Connector Generator. A session represents a complete workflow instance that tracks all state, configuration, and results as you progress through discovery, scraping, digesting, and code generation.
+
+Each session maintains:
+- **Configuration data**: Application details, API URLs, and processing parameters
+- **Documentation items**: Scraped or uploaded API documentation chunks
+- **Job tracking**: References to all jobs executed within the session
+- **Results**: Outputs from each processing stage (discovery, schema extraction, code generation)
+
+## Session Lifecycle
+
+<Steps>
+  <Step title="Create Session">
+    Initialize a new session to begin the connector generation workflow.
+  </Step>
+  <Step title="Add Documentation">
+    Upload documentation files or run discovery/scraping jobs.
+  </Step>
+  <Step title="Process & Extract">
+    Execute digester jobs to extract schema information.
+  </Step>
+  <Step title="Generate Code">
+    Run code generation to produce connector code.
+  </Step>
+  <Step title="Retrieve Results">
+    Access generated code and metadata from session data.
+  </Step>
+</Steps>
+
+## Session Schema
+
+Sessions follow a consistent data structure defined in the system:
+
+```python src/common/session/schema.py
+class Session(BaseModel):
+    sessionId: UUID        # Unique identifier (UUID v4)
+    createdAt: str        # ISO 8601 timestamp
+    updatedAt: str        # ISO 8601 timestamp
+    data: Dict[str, Any]  # Arbitrary session payload
+```
+
+### Session Data Structure
+
+The `data` field contains all session state and results. Common keys include:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `discoveryInput` | Object | Discovery job input parameters |
+| `discoveryJobId` | UUID | ID of the discovery job |
+| `discoveryOutput` | Object | Discovered candidate URLs |
+| `scrapeInput` | Object | Scraping configuration |
+| `scrapeJobId` | UUID | ID of the scraping job |
+| `documentationItems` | Array | All documentation chunks |
+| `digesterInput` | Object | Schema extraction parameters |
+| `digesterJobId` | UUID | ID of the digester job |
+| `objectClasses` | Array | Extracted object class schemas |
+| `codegenInput` | Object | Code generation parameters |
+| `codegenJobId` | UUID | ID of the codegen job |
+| `generatedCode` | Object | Generated connector code |
+
+## API Operations
+
+### Create a New Session
+
+<CodeGroup>
+```bash POST /session
+curl -X POST "http://localhost:8000/session" \
+  -H "Content-Type: application/json"
+```
+
+```json Response
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Session created successfully. Use this session_id in subsequent requests."
+}
+```
+</CodeGroup>
+
+### Create Session with Specific ID
+
+You can create a session with a predetermined ID:
+
+<CodeGroup>
+```bash POST /session/{session_id}
+curl -X POST "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json"
+```
+
+```json Response
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Session created successfully with provided ID."
+}
+```
+</CodeGroup>
+
+<Note>
+Returns 409 Conflict if the session ID already exists.
+</Note>
+
+### Get Session Data
+
+Retrieve all data associated with a session:
+
+<CodeGroup>
+```bash GET /session/{session_id}
+curl -X GET "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000"
+```
+
+```json Response
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "data": {
+    "discoveryInput": {
+      "applicationName": "MyAPI",
+      "applicationVersion": "v1"
+    },
+    "documentationItems": [],
+    "objectClasses": []
+  },
+  "createdAt": "2026-03-10T12:00:00Z",
+  "updatedAt": "2026-03-10T12:30:00Z"
+}
+```
+</CodeGroup>
+
+### Update Session Data
+
+Merge new data into the session (partial update):
+
+<CodeGroup>
+```bash PATCH /session/{session_id}
+curl -X PATCH "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": {
+      "customMetadata": "value",
+      "processingStage": "discovery"
+    }
+  }'
+```
+
+```json Response
+{
+  "message": "Session updated successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+</CodeGroup>
+
+<Info>
+The update operation merges the provided data with existing session data. Existing keys are preserved unless explicitly overwritten.
+</Info>
+
+### Check Session Exists
+
+Verify if a session exists without retrieving data:
+
+```bash HEAD /session/{session_id}
+curl -I "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000"
+
+# Returns 204 No Content if exists
+# Returns 404 Not Found if doesn't exist
+```
+
+### Delete Session
+
+Remove a session and all associated data:
+
+<CodeGroup>
+```bash DELETE /session/{session_id}
+curl -X DELETE "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000"
+```
+
+```json Response
+{
+  "message": "Session deleted successfully",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+</CodeGroup>
+
+<Warning>
+Deleting a session removes all associated jobs, documentation items, and generated results. This operation cannot be undone.
+</Warning>
+
+## Documentation Items
+
+Sessions store documentation chunks as `DocumentationItem` objects:
+
+```python src/common/session/schema.py
+class DocumentationItem(BaseModel):
+    id: UUID                        # Unique identifier
+    page_id: Optional[UUID]         # Page grouping identifier
+    source: str                     # "scraper" or "upload"
+    scrape_job_ids: Optional[list[UUID]]
+    url: Optional[str]              # Source URL (for scraped docs)
+    summary: Optional[str]          # AI-generated summary
+    content: str                    # Raw documentation text
+    metadata: Dict[str, Any]        # Additional metadata
+```
+
+### Upload Documentation
+
+Add documentation files to a session:
+
+<CodeGroup>
+```bash POST /session/{session_id}/documentation
+curl -X POST "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000/documentation" \
+  -F "documentation=@openapi.yaml"
+```
+
+```json Response
+{
+  "message": "Documentation upload queued for processing",
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "pageId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "chunksToProcess": 5,
+  "status": "queued"
+}
+```
+</CodeGroup>
+
+<Info>
+Documentation is automatically chunked and processed with LLM analysis. Each chunk becomes a separate `DocumentationItem` with extracted metadata like tags, categories, and endpoint counts.
+</Info>
+
+### Retrieve Documentation
+
+Get all documentation items in a session:
+
+<CodeGroup>
+```bash GET /session/{session_id}/documentation
+curl -X GET "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000/documentation"
+```
+
+```json Response
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "documentationItems": [
+    {
+      "uuid": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+      "pageId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "source": "upload",
+      "content": "...",
+      "summary": "User API endpoints for CRUD operations",
+      "@metadata": {
+        "chunk_number": 0,
+        "num_endpoints": 4,
+        "tags": ["users", "CRUD"],
+        "category": "API"
+      }
+    }
+  ],
+  "count": 1
+}
+```
+</CodeGroup>
+
+## List Session Jobs
+
+Retrieve all jobs associated with a session:
+
+<CodeGroup>
+```bash GET /session/{session_id}/jobs
+curl -X GET "http://localhost:8000/session/550e8400-e29b-41d4-a716-446655440000/jobs"
+```
+
+```json Response
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "jobs": [
+    {
+      "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+      "type": "documentation.processUpload",
+      "status": "finished",
+      "createdAt": "2026-03-10T12:00:00Z",
+      "updatedAt": "2026-03-10T12:01:30Z",
+      "startedAt": "2026-03-10T12:00:05Z",
+      "finishedAt": "2026-03-10T12:01:30Z"
+    }
+  ]
+}
+```
+</CodeGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Session ID Management">
+    Store the session ID returned from creation. You'll need it for all subsequent operations in the workflow.
+  </Accordion>
+
+  <Accordion title="Session Reuse">
+    Sessions support caching of previous results. Use `usePreviousSessionData: true` in job inputs to reuse compatible outputs from previous jobs, significantly reducing processing time and LLM costs.
+  </Accordion>
+
+  <Accordion title="Session Cleanup">
+    Delete sessions after completing the connector generation workflow to free up storage. Sessions accumulate significant data from documentation processing and intermediate results.
+  </Accordion>
+
+  <Accordion title="Error Handling">
+    Always check job status before proceeding to the next stage. Failed jobs may leave the session in an inconsistent state requiring manual intervention or session restart.
+  </Accordion>
+</AccordionGroup>
+
+## Related Concepts
+
+<CardGroup cols={2}>
+  <Card title="Workflow" icon="diagram-project" href="/concepts/workflow">
+    Learn about the complete connector generation workflow
+  </Card>
+  <Card title="Job Status" icon="list-check" href="/concepts/job-status">
+    Track job progress and handle job lifecycle
+  </Card>
+</CardGroup>

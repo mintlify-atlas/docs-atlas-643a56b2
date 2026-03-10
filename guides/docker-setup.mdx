@@ -1,0 +1,485 @@
+---
+title: Docker Setup
+description: Deploy the midPilot Connector Generator using Docker and Docker Compose
+---
+
+The midPilot Connector Generator provides a complete Docker setup with PostgreSQL database and automatic migrations. This guide covers containerized deployment.
+
+## Prerequisites
+
+<CardGroup cols={2}>
+  <Card title="Docker" icon="docker" href="https://docs.docker.com/get-docker/">
+    Docker Engine 20.10 or later
+  </Card>
+  <Card title="Docker Compose" icon="layer-group" href="https://docs.docker.com/compose/install/">
+    Docker Compose V2 or later
+  </Card>
+</CardGroup>
+
+Verify installation:
+```bash
+docker --version
+docker compose version
+```
+
+## Docker Architecture
+
+The Docker setup includes two services:
+
+<Steps>
+  <Step title="PostgreSQL Database">
+    **Container:** `db`  
+    **Image:** `postgres:15-alpine`  
+    **Purpose:** Data persistence and storage
+    
+    Features:
+    - Health checks for reliable startup
+    - Persistent volume for data
+    - Automatic initialization from `.env`
+  </Step>
+
+  <Step title="API Service">
+    **Container:** `api`  
+    **Image:** `midpilot-connector-gen:latest`  
+    **Purpose:** FastAPI application server
+    
+    Features:
+    - Depends on healthy database
+    - Includes Playwright for web scraping
+    - Auto-runs migrations on startup
+  </Step>
+</Steps>
+
+## Quick Start
+
+<Steps>
+  <Step title="Configure environment">
+    Create and configure your `.env` file:
+    ```bash
+    cp .env-example .env
+    nano .env
+    ```
+    
+    Set at minimum:
+    ```bash
+    DATABASE__NAME=connector_db
+    DATABASE__USER=connector_user
+    DATABASE__PASSWORD=secure_password_here
+    LLM__OPENAI_API_KEY=your-api-key
+    ```
+  </Step>
+
+  <Step title="Build the image">
+    ```bash
+    docker compose build
+    ```
+    
+    This process:
+    - Uses Python 3.13 base image
+    - Installs dependencies with UV
+    - Installs Playwright browsers
+    - Creates optimized production image
+  </Step>
+
+  <Step title="Start the services">
+    ```bash
+    docker compose up
+    ```
+    
+    To run in detached mode:
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+
+  <Step title="Verify the services">
+    ```bash
+    # Check running containers
+    docker compose ps
+    
+    # Check API health
+    curl http://localhost:8090/health
+    
+    # View logs
+    docker compose logs -f
+    ```
+  </Step>
+</Steps>
+
+## Docker Compose Configuration
+
+The `docker-compose.yaml` defines the complete stack:
+
+<CodeGroup>
+```yaml docker-compose.yaml
+services:
+  midpilot-connector-gen:
+    build: .
+    image: midpilot-connector-gen:latest
+    container_name: api
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      LOGGING__LEVEL: info
+      DATABASE__HOST: db
+      DATABASE__PORT: 5432
+      DATABASE__URL: postgresql+asyncpg://${DATABASE__USER}:${DATABASE__PASSWORD}@db:5432/${DATABASE__NAME}
+    ports:
+      - "${HOST_PORT:-8090}:8090"
+
+  db:
+    image: postgres:15-alpine
+    container_name: db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DATABASE__NAME}
+      POSTGRES_USER: ${DATABASE__USER}
+      POSTGRES_PASSWORD: ${DATABASE__PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE__USER} -d ${DATABASE__NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    ports:
+      - ${DATABASE__PORT}:${DATABASE__PORT}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+    driver: local
+```
+</CodeGroup>
+
+### Key Features
+
+<AccordionGroup>
+  <Accordion title="Health Checks">
+    The database service includes health checks to ensure it's ready before the API starts:
+    ```yaml
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE__USER} -d ${DATABASE__NAME}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    ```
+    
+    The API service depends on a healthy database:
+    ```yaml
+    depends_on:
+      db:
+        condition: service_healthy
+    ```
+  </Accordion>
+
+  <Accordion title="Persistent Storage">
+    Database data is persisted using Docker volumes:
+    ```yaml
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ```
+    
+    Data survives container restarts and recreations.
+  </Accordion>
+
+  <Accordion title="Environment Variables">
+    Both services load from `.env`:
+    ```yaml
+    env_file:
+      - .env
+    ```
+    
+    The API service overrides `DATABASE__HOST` to use the internal service name `db`.
+  </Accordion>
+
+  <Accordion title="Custom Port">
+    Customize the exposed port:
+    ```bash
+    # In .env
+    HOST_PORT=3000
+    ```
+    
+    Default is 8090.
+  </Accordion>
+</AccordionGroup>
+
+## Dockerfile Breakdown
+
+The multi-stage Dockerfile optimizes the build:
+
+<CodeGroup>
+```dockerfile Dockerfile
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+
+WORKDIR /app
+
+# UV settings
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
+
+# Install dependencies (cached layer)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-install-project --no-dev
+
+# Copy project and install
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv uv sync --locked --no-dev
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Install Playwright browsers
+RUN python -m playwright install --with-deps chromium
+
+ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
+
+EXPOSE 8090
+
+CMD ["python", "server.py"]
+```
+</CodeGroup>
+
+### Build Optimizations
+
+<CardGroup cols={2}>
+  <Card title="Cache Mounts" icon="bolt">
+    UV cache is preserved between builds for faster rebuilds
+  </Card>
+  <Card title="Layer Ordering" icon="layer-group">
+    Dependencies install before code copy for efficient caching
+  </Card>
+  <Card title="Bytecode Compilation" icon="microchip">
+    Python bytecode compiled during build for faster startup
+  </Card>
+  <Card title="No Dev Dependencies" icon="scissors">
+    Production image excludes development tools
+  </Card>
+</CardGroup>
+
+## Docker Commands
+
+### Common Operations
+
+<CodeGroup>
+```bash Start Services
+# Start in foreground
+docker compose up
+
+# Start in background
+docker compose up -d
+
+# Start and rebuild
+docker compose up --build
+```
+
+```bash Stop Services
+# Stop containers
+docker compose stop
+
+# Stop and remove containers
+docker compose down
+
+# Stop and remove volumes (deletes data!)
+docker compose down -v
+```
+
+```bash View Logs
+# All services
+docker compose logs -f
+
+# API only
+docker compose logs -f midpilot-connector-gen
+
+# Database only
+docker compose logs -f db
+
+# Last 100 lines
+docker compose logs --tail=100
+```
+
+```bash Execute Commands
+# Run Alembic migration
+docker compose exec midpilot-connector-gen uv run alembic upgrade head
+
+# Access database
+docker compose exec db psql -U ${DATABASE__USER} -d ${DATABASE__NAME}
+
+# Shell in API container
+docker compose exec midpilot-connector-gen bash
+
+# Run tests
+docker compose exec midpilot-connector-gen uv run pytest
+```
+</CodeGroup>
+
+### Database Management
+
+<CodeGroup>
+```bash Backup
+# Backup database
+docker compose exec db pg_dump -U ${DATABASE__USER} ${DATABASE__NAME} > backup.sql
+
+# Backup with compression
+docker compose exec db pg_dump -U ${DATABASE__USER} ${DATABASE__NAME} | gzip > backup.sql.gz
+```
+
+```bash Restore
+# Restore from backup
+docker compose exec -T db psql -U ${DATABASE__USER} ${DATABASE__NAME} < backup.sql
+
+# Restore from compressed backup
+gunzip < backup.sql.gz | docker compose exec -T db psql -U ${DATABASE__USER} ${DATABASE__NAME}
+```
+
+```bash Reset Database
+# Stop and remove everything
+docker compose down -v
+
+# Start fresh
+docker compose up -d
+```
+</CodeGroup>
+
+## Production Considerations
+
+<Note>
+These recommendations apply when deploying to production environments.
+</Note>
+
+### Security
+
+<CardGroup cols={2}>
+  <Card title="Use Secrets Management" icon="key">
+    Store sensitive values in Docker secrets or external secret managers
+  </Card>
+  <Card title="Restrict Network Access" icon="shield">
+    Use Docker networks to isolate services
+  </Card>
+  <Card title="Non-Root User" icon="user-shield">
+    Run containers as non-root user
+  </Card>
+  <Card title="Scan Images" icon="magnifying-glass">
+    Regularly scan images for vulnerabilities
+  </Card>
+</CardGroup>
+
+### Scaling
+
+```yaml
+# docker-compose.prod.yaml
+services:
+  midpilot-connector-gen:
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+```
+
+### Monitoring
+
+```yaml
+services:
+  midpilot-connector-gen:
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Database connection refused">
+    **Symptom:** API can't connect to database
+    
+    **Solution:**
+    ```bash
+    # Check database health
+    docker compose ps
+    
+    # View database logs
+    docker compose logs db
+    
+    # Verify environment variables
+    docker compose exec midpilot-connector-gen env | grep DATABASE
+    ```
+    
+    Ensure `DATABASE__HOST=db` in the API service environment.
+  </Accordion>
+
+  <Accordion title="Port already in use">
+    **Symptom:** `Error: bind: address already in use`
+    
+    **Solution:**
+    ```bash
+    # Change port in .env
+    HOST_PORT=8091
+    
+    # Or stop conflicting service
+    lsof -i :8090
+    kill <PID>
+    ```
+  </Accordion>
+
+  <Accordion title="Image build fails">
+    **Symptom:** Build errors or timeout
+    
+    **Solution:**
+    ```bash
+    # Clean build cache
+    docker compose build --no-cache
+    
+    # Prune Docker system
+    docker system prune -a
+    
+    # Check disk space
+    df -h
+    ```
+  </Accordion>
+
+  <Accordion title="Container keeps restarting">
+    **Symptom:** Container exits immediately
+    
+    **Solution:**
+    ```bash
+    # View recent logs
+    docker compose logs --tail=50 midpilot-connector-gen
+    
+    # Check for missing environment variables
+    docker compose config
+    
+    # Run migrations manually
+    docker compose exec midpilot-connector-gen uv run alembic upgrade head
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Database Setup" icon="database" href="/guides/database-setup">
+    Learn about migrations and database management
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/sessions/create">
+    Explore available endpoints
+  </Card>
+</CardGroup>

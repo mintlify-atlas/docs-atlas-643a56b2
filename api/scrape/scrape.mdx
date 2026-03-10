@@ -1,0 +1,69 @@
+---
+title: "Scrape Documentation"
+api: "POST /api/v1/scrape/{session_id}/scrape"
+description: "Enqueue a job to scrape documentation from provided URLs"
+---
+
+This endpoint initiates a scraping job that crawls and extracts documentation content from the specified URLs. The scraped content is processed, chunked, and stored in the session for use in subsequent connector generation steps.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+## Request Body
+
+<ParamField body="starterLinks" type="array" required>
+  Initial URLs to scrape. The scraper will follow links from these pages to discover and scrape related documentation
+</ParamField>
+
+<ParamField body="applicationName" type="string" required>
+  Target application name for which documentation is being scraped
+</ParamField>
+
+<ParamField body="applicationVersion" type="string" required>
+  Application version to scrape documentation for (e.g., "4.8", "current", "latest")
+</ParamField>
+
+<ParamField body="usePreviousSessionData" type="boolean" default={true}>
+  Whether to reuse already processed data from a previous session when the scraper input is identical. This can significantly speed up the process by avoiding redundant scraping
+</ParamField>
+
+## Response
+
+<ResponseField name="jobId" type="string" required>
+  Unique identifier of the created scraping job (UUID format)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/scrape/550e8400-e29b-41d4-a716-446655440000/scrape" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "starterLinks": [
+      "https://docs.evolveum.com/midpoint/reference/",
+      "https://docs.evolveum.com/midpoint/install/"
+    ],
+    "applicationName": "midPoint",
+    "applicationVersion": "4.8",
+    "usePreviousSessionData": true
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "jobId": "9b3e7f12-8c4a-43d9-b5e2-1a9c8f7d6e5b"
+}
+```
+
+## Notes
+
+- The scraping job runs asynchronously. Use the [Get Scrape Status](/api/scrape/status) endpoint to check the job progress
+- The scraper intelligently follows links within the same documentation domain to discover related content
+- Scraped content is chunked and stored in the session under the `scrapeOutput` key
+- The job ID is also stored in the session as `scrapeJobId` for convenient status checking
+- Setting `usePreviousSessionData` to `true` can save time by reusing previously scraped content when the input parameters match exactly

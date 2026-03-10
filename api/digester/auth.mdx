@@ -1,0 +1,223 @@
+---
+title: 'Extract Authentication'
+description: 'Extract authentication mechanisms from API documentation'
+api: 'POST /digester/{session_id}/auth'
+---
+
+Extract authentication information from API documentation. Identifies authentication mechanisms such as Basic Auth, Bearer tokens, OAuth2, API Keys, and other security schemes.
+
+## Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="use_previous_session_data" type="boolean" default="true">
+  Whether to use previous session data if available
+</ParamField>
+
+## Response
+
+Returns a job ID to poll for results.
+
+<ResponseField name="jobId" type="string">
+  Job ID (UUID) to track extraction progress
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/auth" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "jobId": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+---
+
+## Get Authentication Status
+
+<api method="GET" path="/digester/{session_id}/auth" />
+
+Get the status and results of the authentication extraction job.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="jobId" type="string">
+  Job ID (optional, will use session's job if not provided)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Job status: `pending`, `running`, `finished`, or `failed`
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Extraction results (available when status is `finished`)
+  
+  <ResponseField name="result.auth" type="array">
+    List of authentication methods supported by the API
+    
+    <ResponseField name="result.auth[].name" type="string">
+      Full name of the authentication method as written in the documentation (preserves original casing, e.g., "BasicAuth", "Bearer token", "OAuth 2.0")
+    </ResponseField>
+    
+    <ResponseField name="result.auth[].type" type="string">
+      Normalized auth type: `basic`, `bearer`, `session`, `oauth2`, `apiKey`, `mtls`, or closest descriptive string
+    </ResponseField>
+    
+    <ResponseField name="result.auth[].quirks" type="string">
+      Short notes about special behavior or non-standard aspects (e.g., custom headers, required scopes, token prefix)
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/auth?jobId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "auth": [
+      {
+        "name": "Bearer Token",
+        "type": "bearer",
+        "quirks": "Requires 'Bearer' prefix in Authorization header"
+      },
+      {
+        "name": "Basic Authentication",
+        "type": "basic",
+        "quirks": "Username and password encoded in Base64"
+      },
+      {
+        "name": "OAuth 2.0",
+        "type": "oauth2",
+        "quirks": "Supports authorization_code and client_credentials flows. Requires 'read:users' and 'write:users' scopes"
+      },
+      {
+        "name": "API Key",
+        "type": "apiKey",
+        "quirks": "Pass API key in 'X-API-Key' header"
+      }
+    ]
+  }
+}
+```
+
+## Common Authentication Types
+
+The extraction identifies various authentication mechanisms:
+
+### Basic Authentication
+Username and password authentication using the HTTP Basic scheme.
+
+```json
+{
+  "name": "Basic Auth",
+  "type": "basic",
+  "quirks": "Credentials must be Base64 encoded"
+}
+```
+
+### Bearer Token / JWT
+Token-based authentication using the Bearer scheme.
+
+```json
+{
+  "name": "Bearer JWT",
+  "type": "bearer",
+  "quirks": "JWT token with exp claim, pass in Authorization: Bearer {token}"
+}
+```
+
+### OAuth 2.0
+OAuth 2.0 authentication with various grant types.
+
+```json
+{
+  "name": "OAuth 2.0",
+  "type": "oauth2",
+  "quirks": "Supports authorization_code, client_credentials, and refresh_token flows. Token endpoint: /oauth/token"
+}
+```
+
+### API Key
+API key authentication in headers or query parameters.
+
+```json
+{
+  "name": "API Key",
+  "type": "apiKey",
+  "quirks": "Key must be passed in X-API-Key header or api_key query parameter"
+}
+```
+
+### Session / Cookie
+Session-based authentication using cookies.
+
+```json
+{
+  "name": "Session Cookie",
+  "type": "session",
+  "quirks": "JSESSIONID cookie set after login, expires after 30 minutes of inactivity"
+}
+```
+
+### Mutual TLS (mTLS)
+Certificate-based authentication.
+
+```json
+{
+  "name": "Client Certificate",
+  "type": "mtls",
+  "quirks": "Requires valid client certificate signed by trusted CA"
+}
+```
+
+## Authentication Quirks
+
+The `quirks` field captures important implementation details:
+
+- Custom header names (e.g., "Use X-Auth-Token instead of Authorization")
+- Token prefixes (e.g., "Must use 'Token' prefix, not 'Bearer'")
+- Required scopes or permissions (e.g., "Requires admin:write scope")
+- Token expiration details (e.g., "Tokens expire after 1 hour")
+- Special authentication flows (e.g., "Must call /auth/challenge first")
+- Realm or domain requirements (e.g., "Must specify realm in WWW-Authenticate")
+
+## Error Responses
+
+<ResponseField name="status_code" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+### Common Errors
+
+**404 Not Found** - Session not found
+```json
+{
+  "detail": "Session not found: 550e8400-e29b-41d4-a716-446655440000"
+}
+```

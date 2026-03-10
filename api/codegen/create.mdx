@@ -1,0 +1,258 @@
+---
+title: "Generate Create Code"
+api: "POST /api/v1/session/{session_id}/classes/{object_class}/create"
+description: "Generate Groovy create code for creating new objects in the target system"
+---
+
+## Overview
+
+Generates Groovy create operation code for the specified object class. This endpoint creates code that handles creating new objects in the target system, including attribute mapping, validation, and API request construction.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  The name of the object class (e.g., "account", "user", "group")
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="usePreviousSessionData" type="boolean" default="true">
+  Whether to use previous session data for generation. Set to `false` to force regeneration from scratch.
+</ParamField>
+
+## Request
+
+No request body is required. The endpoint automatically loads:
+- Attributes from session data
+- Endpoints from session data
+- Relevant documentation chunks for the create operation
+
+## Response
+
+<ResponseField name="jobId" type="string (UUID)" required>
+  The unique identifier for the created code generation job
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "jobId": "d4e5f6a7-b8c9-0123-def0-234567890123"
+}
+```
+
+## Prerequisites
+
+Before calling this endpoint, you must:
+
+1. Create a session using `POST /api/v1/session`
+2. Generate attributes using `POST /api/v1/session/{session_id}/classes/{object_class}/attributes`
+3. Generate endpoints using `POST /api/v1/session/{session_id}/classes/{object_class}/endpoints`
+
+If attributes or endpoints are not found in the session, the endpoint returns a 404 error.
+
+## Status Codes
+
+<ResponseField name="200" type="OK">
+  Job created successfully
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session not found, attributes not available, or endpoints not available
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/create?usePreviousSessionData=true" \
+  -H "Content-Type: application/json"
+```
+
+## Checking Job Status
+
+After creating the job, use the GET endpoint to check the generation status. This endpoint returns multi-document progress tracking:
+
+<CodeGroup>
+```bash cURL
+curl "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/create?jobId=d4e5f6a7-b8c9-0123-def0-234567890123"
+```
+</CodeGroup>
+
+### Status Response
+
+```json
+{
+  "jobId": "d4e5f6a7-b8c9-0123-def0-234567890123",
+  "status": "running",
+  "createdAt": "2026-03-10T12:03:00Z",
+  "startedAt": "2026-03-10T12:03:01Z",
+  "updatedAt": "2026-03-10T12:03:20Z",
+  "progress": {
+    "stage": "generating",
+    "message": "Processing documentation chunks",
+    "processedDocuments": 5,
+    "totalDocuments": 8
+  }
+}
+```
+
+### Completed Job Response
+
+```json
+{
+  "jobId": "d4e5f6a7-b8c9-0123-def0-234567890123",
+  "status": "finished",
+  "createdAt": "2026-03-10T12:03:00Z",
+  "startedAt": "2026-03-10T12:03:01Z",
+  "updatedAt": "2026-03-10T12:04:15Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Create code generated successfully",
+    "processedDocuments": 8,
+    "totalDocuments": 8
+  },
+  "result": {
+    "code": "// Generated create Groovy code\n..."
+  }
+}
+```
+
+## Manually Override Create Code
+
+You can manually override the generated create code using the PUT endpoint:
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/create" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "// Custom create Groovy code\n..."
+  }'
+```
+</CodeGroup>
+
+### Override Response
+
+```json
+{
+  "message": "Create code for account overridden successfully",
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "objectClass": "account"
+}
+```
+
+## Generated Code Structure
+
+The generated create code typically includes:
+
+- Attribute extraction and validation
+- Request payload construction
+- API endpoint invocation (POST request)
+- Response parsing
+- UID extraction from created object
+- Error handling and validation
+- Required vs. optional attribute handling
+
+Example generated create code:
+
+```groovy
+import groovy.json.JsonBuilder
+import groovy.json.JsonSlurper
+
+def createAccount(ObjectClass objectClass, Set<Attribute> attributes, OperationOptions options) {
+    log.info("Creating account with attributes: {0}", attributes)
+    
+    // Extract attributes
+    def attrs = AttributeUtil.toMap(attributes)
+    def username = attrs.get(Name.NAME)
+    def email = AttributeUtil.getStringValue(attrs.get("email"))
+    def firstName = AttributeUtil.getStringValue(attrs.get("firstName"))
+    def lastName = AttributeUtil.getStringValue(attrs.get("lastName"))
+    def active = AttributeUtil.getBooleanValue(attrs.get("active"))
+    
+    // Validate required attributes
+    if (!username) {
+        throw new InvalidAttributeValueException("Username is required")
+    }
+    if (!email) {
+        throw new InvalidAttributeValueException("Email is required")
+    }
+    
+    // Build request payload
+    def payload = [
+        username: username,
+        email: email,
+        firstName: firstName,
+        lastName: lastName,
+        active: active != null ? active : true
+    ]
+    
+    // Add optional attributes
+    if (attrs.get("phoneNumber")) {
+        payload.phoneNumber = AttributeUtil.getStringValue(attrs.get("phoneNumber"))
+    }
+    
+    def json = new JsonBuilder(payload).toString()
+    
+    // Execute API call
+    def response = connection.post("/api/users", json)
+    
+    // Parse response
+    def jsonSlurper = new JsonSlurper()
+    def result = jsonSlurper.parseText(response)
+    
+    // Return UID of created object
+    if (!result.id) {
+        throw new ConnectorException("Failed to create account: no ID returned")
+    }
+    
+    log.info("Successfully created account with ID: {0}", result.id)
+    return new Uid(result.id as String)
+}
+```
+
+## Multi-Document Processing
+
+Create code generation processes multiple documentation chunks to ensure comprehensive coverage:
+
+- **processedDocuments**: Number of documentation chunks analyzed
+- **totalDocuments**: Total number of relevant chunks for this operation
+- Progress updates occur as each chunk is processed
+
+## Error Responses
+
+### 404 Not Found - Session Not Found
+
+```json
+{
+  "detail": "Session with ID 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+### 404 Not Found - Attributes Not Available
+
+```json
+{
+  "detail": "No attributes found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/attributes endpoint first."
+}
+```
+
+### 404 Not Found - Endpoints Not Available
+
+```json
+{
+  "detail": "No endpoints found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/endpoints endpoint first."
+}
+```
+
+## Related Endpoints
+
+- [Generate Attributes](/api/digester/attributes) - Generate attributes (prerequisite)
+- [Generate Endpoints](/api/digester/endpoints) - Generate endpoints (prerequisite)
+- [Generate Search Code](/api/codegen/search) - Generate search operation code
+- [Generate Update Code](/api/codegen/update) - Generate update operation code
+- [Generate Delete Code](/api/codegen/delete) - Generate delete operation code

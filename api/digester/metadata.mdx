@@ -1,0 +1,308 @@
+---
+title: 'Extract Metadata'
+description: 'Extract high-level API metadata and product information'
+api: 'POST /digester/{session_id}/metadata'
+---
+
+Extract high-level API metadata from documentation including product name, API version, API type (REST, GraphQL, SOAP, etc.), and base API endpoints.
+
+## Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="use_previous_session_data" type="boolean" default="true">
+  Whether to use previous session data if available
+</ParamField>
+
+## Response
+
+Returns a job ID to poll for results.
+
+<ResponseField name="jobId" type="string">
+  Job ID (UUID) to track extraction progress
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X POST "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/metadata" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "jobId": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+---
+
+## Get Metadata Status
+
+<api method="GET" path="/digester/{session_id}/metadata" />
+
+Get the status and results of the metadata extraction job.
+
+### Request
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+<ParamField query="jobId" type="string">
+  Job ID (optional, will use session's job if not provided)
+</ParamField>
+
+### Response
+
+<ResponseField name="status" type="string">
+  Job status: `pending`, `running`, `finished`, or `failed`
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Extraction results (available when status is `finished`)
+  
+  <ResponseField name="result.infoAboutSchema" type="object">
+    High-level application and API metadata
+    
+    <ResponseField name="result.infoAboutSchema.name" type="string">
+      Application or product name as stated in the documentation
+    </ResponseField>
+    
+    <ResponseField name="result.infoAboutSchema.applicationVersion" type="string">
+      Application version label if provided
+    </ResponseField>
+    
+    <ResponseField name="result.infoAboutSchema.apiVersion" type="string">
+      API version string (e.g., "v1", "2024-05", "1.2.3")
+    </ResponseField>
+    
+    <ResponseField name="result.infoAboutSchema.apiType" type="array">
+      API technology types: `REST`, `OpenAPI`, `SCIM`, `SOAP`, `GraphQL`, `Other`
+    </ResponseField>
+    
+    <ResponseField name="result.infoAboutSchema.baseApiEndpoint" type="array">
+      One or more base endpoints with their classification
+      
+      <ResponseField name="result.infoAboutSchema.baseApiEndpoint[].uri" type="string">
+        Base URL or URI template (e.g., "https://api.example.com/v1")
+      </ResponseField>
+      
+      <ResponseField name="result.infoAboutSchema.baseApiEndpoint[].type" type="string">
+        Either `constant` (same for all deployments) or `dynamic` (varies per tenant/installation)
+      </ResponseField>
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -X GET "https://api.example.com/digester/550e8400-e29b-41d4-a716-446655440000/metadata?jobId=123e4567-e89b-12d3-a456-426614174000" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### Example Response
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "infoAboutSchema": {
+      "name": "Acme Identity Platform",
+      "applicationVersion": "2024.1",
+      "apiVersion": "v2",
+      "apiType": ["REST", "OpenAPI"],
+      "baseApiEndpoint": [
+        {
+          "uri": "https://api.acme.com/v2",
+          "type": "constant"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Metadata Fields
+
+### Product Name
+The name of the API or product as it appears in the documentation.
+
+```json
+{
+  "name": "Acme Identity Platform"
+}
+```
+
+### Application Version
+The version of the application or product itself (not the API version).
+
+```json
+{
+  "applicationVersion": "2024.1"
+}
+```
+
+### API Version
+The specific version of the API being documented.
+
+```json
+{
+  "apiVersion": "v2"
+}
+```
+
+Common formats:
+- Semantic versioning: `1.2.3`
+- Simple versioning: `v1`, `v2`
+- Date-based: `2024-05`, `2024-01-15`
+
+### API Type
+The technology or protocol used by the API.
+
+```json
+{
+  "apiType": ["REST", "OpenAPI"]
+}
+```
+
+Possible values:
+- `REST` - RESTful API
+- `OpenAPI` - OpenAPI/Swagger specification
+- `SCIM` - System for Cross-domain Identity Management
+- `SOAP` - Simple Object Access Protocol
+- `GraphQL` - GraphQL API
+- `Other` - Other types
+
+### Base API Endpoint
+The base URL(s) for accessing the API.
+
+```json
+{
+  "baseApiEndpoint": [
+    {
+      "uri": "https://api.example.com/v1",
+      "type": "constant"
+    },
+    {
+      "uri": "https://{tenant}.example.com/api",
+      "type": "dynamic"
+    }
+  ]
+}
+```
+
+**Constant endpoints**: Same URL for all users/deployments
+- Example: `https://api.github.com`
+
+**Dynamic endpoints**: URL varies by tenant or installation
+- Example: `https://{tenant}.okta.com` (where `{tenant}` is customer-specific)
+- Example: `https://your-domain.auth0.com` (self-hosted)
+
+## Usage in Endpoint Extraction
+
+The metadata extraction is particularly important for endpoint extraction. When you extract endpoints for an object class using `/classes/{object_class}/endpoints`, the system automatically:
+
+1. Loads the `baseApiEndpoint` from metadata
+2. Uses it to construct complete endpoint URLs
+3. Provides context for understanding endpoint paths
+
+This is why it's recommended to run metadata extraction early in your workflow.
+
+## Example: Multi-Region API
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "infoAboutSchema": {
+      "name": "Global Identity Service",
+      "applicationVersion": "3.0.0",
+      "apiVersion": "v3",
+      "apiType": ["REST", "OpenAPI"],
+      "baseApiEndpoint": [
+        {
+          "uri": "https://us.api.example.com/v3",
+          "type": "constant"
+        },
+        {
+          "uri": "https://eu.api.example.com/v3",
+          "type": "constant"
+        },
+        {
+          "uri": "https://ap.api.example.com/v3",
+          "type": "constant"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Example: Multi-Tenant SaaS
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "infoAboutSchema": {
+      "name": "SaaS Platform",
+      "applicationVersion": "2024.2",
+      "apiVersion": "v1",
+      "apiType": ["REST"],
+      "baseApiEndpoint": [
+        {
+          "uri": "https://{tenant}.platform.com/api/v1",
+          "type": "dynamic"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Example: SCIM API
+
+```json
+{
+  "status": "finished",
+  "result": {
+    "infoAboutSchema": {
+      "name": "Enterprise Directory",
+      "applicationVersion": "5.2.1",
+      "apiVersion": "2.0",
+      "apiType": ["SCIM", "REST"],
+      "baseApiEndpoint": [
+        {
+          "uri": "https://directory.example.com/scim/v2",
+          "type": "constant"
+        }
+      ]
+    }
+  }
+}
+```
+
+## Error Responses
+
+<ResponseField name="status_code" type="number">
+  HTTP status code
+</ResponseField>
+
+<ResponseField name="detail" type="string">
+  Error message
+</ResponseField>
+
+### Common Errors
+
+**404 Not Found** - Session not found
+```json
+{
+  "detail": "Session not found: 550e8400-e29b-41d4-a716-446655440000"
+}
+```

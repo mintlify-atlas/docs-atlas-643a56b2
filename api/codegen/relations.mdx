@@ -1,0 +1,283 @@
+---
+title: "Generate Relation Code"
+api: "POST /api/v1/session/{session_id}/relations/{relation_name}"
+description: "Generate Groovy code for handling relationships between object classes"
+---
+
+## Overview
+
+Generates Groovy relation code for the specified relationship. This endpoint creates code that handles associations between different object classes (e.g., user-to-group membership, manager-employee relationships). It automatically loads relations data from the session.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session
+</ParamField>
+
+<ParamField path="relation_name" type="string" required>
+  The name of the relation to generate code for (e.g., "userGroups", "managerEmployee")
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="usePreviousSessionData" type="boolean" default="true">
+  Whether to use previous session data for generation. Set to `false` to force regeneration from scratch.
+</ParamField>
+
+## Request
+
+No request body is required. The endpoint automatically loads relations data from the session.
+
+## Response
+
+<ResponseField name="jobId" type="string (UUID)" required>
+  The unique identifier for the created code generation job
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "jobId": "a7b8c9d0-e1f2-3456-0123-567890123456"
+}
+```
+
+## Prerequisites
+
+Before calling this endpoint, you must:
+
+1. Create a session using `POST /api/v1/session`
+2. Generate relations using `POST /api/v1/session/{session_id}/relations`
+
+If relations are not found in the session, the endpoint returns a 404 error.
+
+## Status Codes
+
+<ResponseField name="200" type="OK">
+  Job created successfully
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session not found or relations not available
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/relations/userGroups?usePreviousSessionData=true" \
+  -H "Content-Type: application/json"
+```
+
+## Checking Job Status
+
+After creating the job, use the GET endpoint to check the generation status. This endpoint returns multi-document progress tracking:
+
+<CodeGroup>
+```bash cURL
+curl "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/relations/userGroups?jobId=a7b8c9d0-e1f2-3456-0123-567890123456"
+```
+</CodeGroup>
+
+### Status Response
+
+```json
+{
+  "jobId": "a7b8c9d0-e1f2-3456-0123-567890123456",
+  "status": "running",
+  "createdAt": "2026-03-10T12:06:00Z",
+  "startedAt": "2026-03-10T12:06:01Z",
+  "updatedAt": "2026-03-10T12:06:22Z",
+  "progress": {
+    "stage": "generating",
+    "message": "Processing documentation chunks",
+    "processedDocuments": 5,
+    "totalDocuments": 12
+  }
+}
+```
+
+### Completed Job Response
+
+```json
+{
+  "jobId": "a7b8c9d0-e1f2-3456-0123-567890123456",
+  "status": "finished",
+  "createdAt": "2026-03-10T12:06:00Z",
+  "startedAt": "2026-03-10T12:06:01Z",
+  "updatedAt": "2026-03-10T12:07:30Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Relation code generated successfully",
+    "processedDocuments": 12,
+    "totalDocuments": 12
+  },
+  "result": {
+    "code": "// Generated relation Groovy code\n..."
+  }
+}
+```
+
+## Manually Override Relation Code
+
+You can manually override the generated relation code using the PUT endpoint:
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/relations/userGroups" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "// Custom relation Groovy code\n..."
+  }'
+```
+</CodeGroup>
+
+### Override Response
+
+```json
+{
+  "message": "Relation code for userGroups overridden successfully",
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "relationName": "userGroups"
+}
+```
+
+## Generated Code Structure
+
+The generated relation code typically includes:
+
+- Association type detection (one-to-many, many-to-many)
+- Membership retrieval logic
+- Add/remove member operations
+- Group listing for users
+- Member listing for groups
+- Bidirectional relationship handling
+
+Example generated relation code for user-group membership:
+
+```groovy
+import groovy.json.JsonBuilder
+import groovy.json.JsonSlurper
+
+// Get groups for a user
+def getUserGroups(Uid userUid) {
+    log.info("Fetching groups for user {0}", userUid.uidValue)
+    
+    def response = connection.get("/api/users/${userUid.uidValue}/groups")
+    def jsonSlurper = new JsonSlurper()
+    def data = jsonSlurper.parseText(response)
+    
+    return data.groups.collect { group ->
+        new Uid(group.id as String)
+    }
+}
+
+// Add user to group
+def addUserToGroup(Uid userUid, Uid groupUid) {
+    log.info("Adding user {0} to group {1}", userUid.uidValue, groupUid.uidValue)
+    
+    def payload = [
+        userId: userUid.uidValue
+    ]
+    
+    def json = new JsonBuilder(payload).toString()
+    connection.post("/api/groups/${groupUid.uidValue}/members", json)
+    
+    log.info("Successfully added user to group")
+}
+
+// Remove user from group
+def removeUserFromGroup(Uid userUid, Uid groupUid) {
+    log.info("Removing user {0} from group {1}", userUid.uidValue, groupUid.uidValue)
+    
+    connection.delete("/api/groups/${groupUid.uidValue}/members/${userUid.uidValue}")
+    
+    log.info("Successfully removed user from group")
+}
+
+// Get members of a group
+def getGroupMembers(Uid groupUid) {
+    log.info("Fetching members for group {0}", groupUid.uidValue)
+    
+    def response = connection.get("/api/groups/${groupUid.uidValue}/members")
+    def jsonSlurper = new JsonSlurper()
+    def data = jsonSlurper.parseText(response)
+    
+    return data.members.collect { member ->
+        new Uid(member.id as String)
+    }
+}
+```
+
+## Relation Types
+
+The generated code handles various relationship patterns:
+
+### One-to-Many Relations
+
+```groovy
+// Manager -> Employees
+def getEmployees(Uid managerUid) {
+    // Returns list of employee UIDs
+}
+```
+
+### Many-to-Many Relations
+
+```groovy
+// Users <-> Groups
+def getUserGroups(Uid userUid) { /* ... */ }
+def getGroupMembers(Uid groupUid) { /* ... */ }
+def addMembership(Uid userUid, Uid groupUid) { /* ... */ }
+def removeMembership(Uid userUid, Uid groupUid) { /* ... */ }
+```
+
+### Nested Relations
+
+```groovy
+// Organization -> Department -> Team -> User
+def getOrganizationHierarchy(Uid orgUid) {
+    // Returns nested structure
+}
+```
+
+## Multi-Document Processing
+
+Relation code generation processes multiple documentation chunks to ensure comprehensive coverage:
+
+- **processedDocuments**: Number of documentation chunks analyzed
+- **totalDocuments**: Total number of relevant chunks for this relation
+- Progress updates occur as each chunk is processed
+
+## Common Relation Patterns
+
+The generated code automatically handles common patterns:
+
+- **Attribute-based relations**: Relations stored as attributes (e.g., `groups: ["group1", "group2"]`)
+- **Endpoint-based relations**: Relations managed via dedicated endpoints (e.g., `/groups/{id}/members`)
+- **Inverse relations**: Bidirectional relationship handling
+- **Cascade operations**: Handling related objects when creating/updating/deleting
+
+## Error Responses
+
+### 404 Not Found - Session Not Found
+
+```json
+{
+  "detail": "Session with ID 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+### 404 Not Found - Relations Not Available
+
+```json
+{
+  "detail": "No relations found in session 123e4567-e89b-12d3-a456-426614174000. Please run /relations endpoint first."
+}
+```
+
+## Related Endpoints
+
+- [Generate Relations](/api/digester/relations) - Discover and extract relations (prerequisite)
+- [Generate Search Code](/api/codegen/search) - Generate search operation code
+- [Generate Create Code](/api/codegen/create) - Generate create operation code (for adding members)
+- [Generate Delete Code](/api/codegen/delete) - Generate delete operation code (for removing members)

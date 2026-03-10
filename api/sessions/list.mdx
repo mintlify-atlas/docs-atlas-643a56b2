@@ -1,0 +1,90 @@
+---
+title: "List Sessions"
+api: "GET /api/v1/session"
+description: "List all sessions (not implemented)"
+---
+
+## Overview
+
+<Note>
+This endpoint is not currently implemented in the midPilot Connector Generator API. Sessions are designed to be accessed individually by their session ID.
+</Note>
+
+## Alternative Approaches
+
+Since there is no list sessions endpoint, you should:
+
+1. **Track Session IDs Client-Side**: Store session IDs returned from the [Create Session](/api/sessions/create) endpoint in your application's storage
+2. **Use Check Session Exists**: Verify if a specific session exists using the HEAD endpoint
+
+## Check Session Exists
+
+You can verify if a session exists without retrieving its full data:
+
+### Endpoint
+
+```
+HEAD /api/v1/session/{session_id}
+```
+
+### Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session to check
+</ParamField>
+
+### Response
+
+<ResponseField name="204" type="No Content">
+  Session exists
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session does not exist
+</ResponseField>
+
+### Example Request
+
+```bash
+curl -I https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000
+```
+
+### Example Responses
+
+**Session Exists (204 No Content)**
+```
+HTTP/1.1 204 No Content
+```
+
+**Session Not Found (404 Not Found)**
+```json
+{
+  "detail": "Session 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+## Usage Pattern
+
+The typical workflow for session management:
+
+1. **Create Session**: Call `POST /api/v1/session` to generate a new session
+2. **Store Session ID**: Save the returned `sessionId` in your application
+3. **Use Session**: Reference the session ID in discovery, scrape, and codegen operations
+4. **Retrieve Session**: Call `GET /api/v1/session/{session_id}` to get session data
+5. **Check Existence**: Use `HEAD /api/v1/session/{session_id}` for lightweight existence checks
+6. **Clean Up**: Call `DELETE /api/v1/session/{session_id}` when done
+
+## Session Lifecycle
+
+Sessions persist until explicitly deleted. They contain:
+- Discovery configuration
+- Scraping results and documentation
+- Generated connector code
+- Job histories and processing status
+
+## Related Endpoints
+
+- [Create Session](/api/sessions/create) - Create a new session
+- [Get Session](/api/sessions/get) - Retrieve session data
+- [Update Session](/api/sessions/get) - Modify session data
+- [Delete Session](/api/sessions/get) - Remove a session

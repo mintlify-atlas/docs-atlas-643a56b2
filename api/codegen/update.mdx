@@ -1,0 +1,266 @@
+---
+title: "Generate Update Code"
+api: "POST /api/v1/session/{session_id}/classes/{object_class}/update"
+description: "Generate Groovy update code for modifying existing objects in the target system"
+---
+
+## Overview
+
+Generates Groovy update operation code for the specified object class. This endpoint creates code that handles updating existing objects in the target system, including attribute change detection, partial updates, and API request construction.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  The name of the object class (e.g., "account", "user", "group")
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="usePreviousSessionData" type="boolean" default="true">
+  Whether to use previous session data for generation. Set to `false` to force regeneration from scratch.
+</ParamField>
+
+## Request
+
+No request body is required. The endpoint automatically loads:
+- Attributes from session data
+- Endpoints from session data
+- Relevant documentation chunks for the update operation
+
+## Response
+
+<ResponseField name="jobId" type="string (UUID)" required>
+  The unique identifier for the created code generation job
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "jobId": "e5f6a7b8-c9d0-1234-ef01-345678901234"
+}
+```
+
+## Prerequisites
+
+Before calling this endpoint, you must:
+
+1. Create a session using `POST /api/v1/session`
+2. Generate attributes using `POST /api/v1/session/{session_id}/classes/{object_class}/attributes`
+3. Generate endpoints using `POST /api/v1/session/{session_id}/classes/{object_class}/endpoints`
+
+If attributes or endpoints are not found in the session, the endpoint returns a 404 error.
+
+## Status Codes
+
+<ResponseField name="200" type="OK">
+  Job created successfully
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session not found, attributes not available, or endpoints not available
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/update?usePreviousSessionData=true" \
+  -H "Content-Type: application/json"
+```
+
+## Checking Job Status
+
+After creating the job, use the GET endpoint to check the generation status. This endpoint returns multi-document progress tracking:
+
+<CodeGroup>
+```bash cURL
+curl "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/update?jobId=e5f6a7b8-c9d0-1234-ef01-345678901234"
+```
+</CodeGroup>
+
+### Status Response
+
+```json
+{
+  "jobId": "e5f6a7b8-c9d0-1234-ef01-345678901234",
+  "status": "running",
+  "createdAt": "2026-03-10T12:04:00Z",
+  "startedAt": "2026-03-10T12:04:01Z",
+  "updatedAt": "2026-03-10T12:04:25Z",
+  "progress": {
+    "stage": "generating",
+    "message": "Processing documentation chunks",
+    "processedDocuments": 6,
+    "totalDocuments": 9
+  }
+}
+```
+
+### Completed Job Response
+
+```json
+{
+  "jobId": "e5f6a7b8-c9d0-1234-ef01-345678901234",
+  "status": "finished",
+  "createdAt": "2026-03-10T12:04:00Z",
+  "startedAt": "2026-03-10T12:04:01Z",
+  "updatedAt": "2026-03-10T12:05:20Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Update code generated successfully",
+    "processedDocuments": 9,
+    "totalDocuments": 9
+  },
+  "result": {
+    "code": "// Generated update Groovy code\n..."
+  }
+}
+```
+
+## Manually Override Update Code
+
+You can manually override the generated update code using the PUT endpoint:
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/update" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "// Custom update Groovy code\n..."
+  }'
+```
+</CodeGroup>
+
+### Override Response
+
+```json
+{
+  "message": "Update code for account overridden successfully",
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "objectClass": "account"
+}
+```
+
+## Generated Code Structure
+
+The generated update code typically includes:
+
+- UID extraction to identify the object
+- Attribute change detection
+- Request payload construction (full or partial update)
+- API endpoint invocation (PUT or PATCH request)
+- Response parsing and validation
+- Error handling
+- Support for attribute operations (add, replace, remove)
+
+Example generated update code:
+
+```groovy
+import groovy.json.JsonBuilder
+import groovy.json.JsonSlurper
+import org.identityconnectors.framework.common.objects.AttributeDelta
+
+def updateAccount(ObjectClass objectClass, Uid uid, Set<AttributeDelta> modifications, OperationOptions options) {
+    log.info("Updating account {0} with modifications: {1}", uid.uidValue, modifications)
+    
+    // Validate UID
+    if (!uid?.uidValue) {
+        throw new InvalidAttributeValueException("UID is required for update")
+    }
+    
+    // Build update payload from attribute deltas
+    def payload = [:]
+    
+    modifications.each { delta ->
+        def attrName = delta.name
+        
+        if (delta.valuesToReplace != null) {
+            // Replace operation
+            if (attrName == "email") {
+                payload.email = AttributeDeltaUtil.getStringValue(delta)
+            } else if (attrName == "firstName") {
+                payload.firstName = AttributeDeltaUtil.getStringValue(delta)
+            } else if (attrName == "lastName") {
+                payload.lastName = AttributeDeltaUtil.getStringValue(delta)
+            } else if (attrName == "active") {
+                payload.active = AttributeDeltaUtil.getBooleanValue(delta)
+            } else if (attrName == "phoneNumber") {
+                payload.phoneNumber = AttributeDeltaUtil.getStringValue(delta)
+            }
+        }
+    }
+    
+    // Skip if no changes
+    if (payload.isEmpty()) {
+        log.info("No attributes to update for account {0}", uid.uidValue)
+        return uid
+    }
+    
+    def json = new JsonBuilder(payload).toString()
+    
+    // Execute API call (PATCH for partial update)
+    def response = connection.patch("/api/users/${uid.uidValue}", json)
+    
+    // Parse response
+    def jsonSlurper = new JsonSlurper()
+    def result = jsonSlurper.parseText(response)
+    
+    log.info("Successfully updated account {0}", uid.uidValue)
+    return uid
+}
+```
+
+## Update Strategies
+
+The generated code supports different update strategies:
+
+- **Full replacement**: PUT request with complete object representation
+- **Partial update**: PATCH request with only changed attributes
+- **Attribute deltas**: Support for add, replace, and remove operations
+- **Optimistic locking**: Version-based conflict detection when supported by the API
+
+## Multi-Document Processing
+
+Update code generation processes multiple documentation chunks to ensure comprehensive coverage:
+
+- **processedDocuments**: Number of documentation chunks analyzed
+- **totalDocuments**: Total number of relevant chunks for this operation
+- Progress updates occur as each chunk is processed
+
+## Error Responses
+
+### 404 Not Found - Session Not Found
+
+```json
+{
+  "detail": "Session with ID 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+### 404 Not Found - Attributes Not Available
+
+```json
+{
+  "detail": "No attributes found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/attributes endpoint first."
+}
+```
+
+### 404 Not Found - Endpoints Not Available
+
+```json
+{
+  "detail": "No endpoints found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/endpoints endpoint first."
+}
+```
+
+## Related Endpoints
+
+- [Generate Attributes](/api/digester/attributes) - Generate attributes (prerequisite)
+- [Generate Endpoints](/api/digester/endpoints) - Generate endpoints (prerequisite)
+- [Generate Search Code](/api/codegen/search) - Generate search operation code
+- [Generate Create Code](/api/codegen/create) - Generate create operation code
+- [Generate Delete Code](/api/codegen/delete) - Generate delete operation code

@@ -1,0 +1,170 @@
+---
+title: "Get Discovery Status"
+api: "GET /api/v1/discovery/{session_id}/discovery"
+description: "Get the status of a candidate links discovery job"
+---
+
+This endpoint retrieves the current status and progress of a discovery job. It provides information about the job's lifecycle, including when it was created, started, and updated, as well as any results or errors.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="jobId" type="string">
+  Job ID (UUID format). If not provided, the system will use the discovery job ID associated with the session
+</ParamField>
+
+## Response
+
+<ResponseField name="jobId" type="string" required>
+  Job identifier (UUID format)
+</ResponseField>
+
+<ResponseField name="status" type="string" required>
+  Current status of the job. Possible values:
+  - `queued` - Job is waiting to be processed
+  - `running` - Job is currently executing
+  - `finished` - Job completed successfully
+  - `failed` - Job encountered an error
+  - `not_found` - Job ID does not exist
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  Job creation time in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="startedAt" type="string">
+  Job start time in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="updatedAt" type="string">
+  Last update time in ISO 8601 format
+</ResponseField>
+
+<ResponseField name="progress" type="object">
+  Progress information about the current job stage
+  
+  <ResponseField name="stage" type="string">
+    High-level stage of the job (e.g., "queue", "running", "finished")
+  </ResponseField>
+  
+  <ResponseField name="message" type="string">
+    Human-friendly note about the current work being performed
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="result" type="object">
+  Result payload when status is 'finished'. Contains the discovered candidate links
+  
+  <ResponseField name="candidateLinks" type="array">
+    List of selected documentation URLs to crawl
+  </ResponseField>
+  
+  <ResponseField name="candidateLinksEnriched" type="array">
+    List of selected links with additional metadata (title, source, etc.)
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="errors" type="array">
+  List of error messages if the job failed. Each item is a single error line for presentation
+</ResponseField>
+
+## Example Request
+
+```bash
+# Using the session's discovery job ID
+curl "https://api.example.com/api/v1/discovery/550e8400-e29b-41d4-a716-446655440000/discovery"
+
+# Using a specific job ID
+curl "https://api.example.com/api/v1/discovery/550e8400-e29b-41d4-a716-446655440000/discovery?jobId=7c9e6679-7425-40de-944b-e07fc1f90ae7"
+```
+
+## Example Response (Running)
+
+```json
+{
+  "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "status": "running",
+  "createdAt": "2026-03-10T14:30:00Z",
+  "startedAt": "2026-03-10T14:30:05Z",
+  "updatedAt": "2026-03-10T14:30:15Z",
+  "progress": {
+    "stage": "running",
+    "message": "Searching for candidate documentation URLs"
+  }
+}
+```
+
+## Example Response (Finished)
+
+```json
+{
+  "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "status": "finished",
+  "createdAt": "2026-03-10T14:30:00Z",
+  "startedAt": "2026-03-10T14:30:05Z",
+  "updatedAt": "2026-03-10T14:32:20Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Discovery completed successfully"
+  },
+  "result": {
+    "candidateLinks": [
+      "https://docs.evolveum.com/midpoint/reference/",
+      "https://docs.evolveum.com/midpoint/install/",
+      "https://docs.evolveum.com/midpoint/architecture/"
+    ],
+    "candidateLinksEnriched": [
+      {
+        "href": "https://docs.evolveum.com/midpoint/reference/",
+        "title": "midPoint Reference Documentation",
+        "source": "google",
+        "body": "Complete reference documentation for midPoint identity management system"
+      },
+      {
+        "href": "https://docs.evolveum.com/midpoint/install/",
+        "title": "midPoint Installation Guide",
+        "source": "duckduckgo",
+        "body": "Step-by-step guide for installing midPoint"
+      },
+      {
+        "href": "https://docs.evolveum.com/midpoint/architecture/",
+        "title": "midPoint Architecture Overview",
+        "source": "google",
+        "body": "Architectural overview and design principles"
+      }
+    ]
+  }
+}
+```
+
+## Example Response (Failed)
+
+```json
+{
+  "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+  "status": "failed",
+  "createdAt": "2026-03-10T14:30:00Z",
+  "startedAt": "2026-03-10T14:30:05Z",
+  "updatedAt": "2026-03-10T14:30:45Z",
+  "progress": {
+    "stage": "failed",
+    "message": "Failed to search for documentation"
+  },
+  "errors": [
+    "Search backend connection timeout",
+    "Unable to retrieve search results after 3 retries"
+  ]
+}
+```
+
+## Notes
+
+- If the `jobId` query parameter is not provided, the endpoint automatically retrieves the discovery job ID from the session
+- Poll this endpoint periodically to track the progress of long-running discovery jobs
+- The `result` field is only populated when the job status is `finished`
+- The `errors` field is only populated when the job status is `failed`

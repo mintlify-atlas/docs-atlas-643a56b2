@@ -1,0 +1,94 @@
+---
+title: "Discover Candidate Links"
+api: "POST /api/v1/discovery/{session_id}/discovery"
+description: "Enqueue a job to discover candidate documentation URLs for the given application"
+---
+
+This endpoint initiates a discovery job that searches for and identifies candidate documentation URLs for a specified application. The discovered URLs are stored in the session and can be used in subsequent crawling operations.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string" required>
+  Session ID (UUID format)
+</ParamField>
+
+## Request Body
+
+<ParamField body="applicationName" type="string" required>
+  Target application name to discover documentation for
+</ParamField>
+
+<ParamField body="applicationVersion" type="string" default="latest">
+  Optional version string for the target application
+</ParamField>
+
+<ParamField body="llmGeneratedSearchQuery" type="boolean" default={false}>
+  Use LLM to generate web search queries (defaults to using templates)
+</ParamField>
+
+<ParamField body="usePreviousSessionData" type="boolean" default={true}>
+  Whether to reuse discovery output from a previous session when input is the same
+</ParamField>
+
+<ParamField body="enableLinkFiltering" type="boolean" default={true}>
+  Enable LLM-based filtering of irrelevant links
+</ParamField>
+
+<ParamField body="enableLinkRanking" type="boolean" default={true}>
+  Enable LLM-based ranking of candidate links
+</ParamField>
+
+<ParamField body="numQueries" type="integer" default={5}>
+  How many distinct search queries to run during discovery
+</ParamField>
+
+<ParamField body="maxResultsPerQuery" type="integer" default={10}>
+  How many results to fetch per query (per backend)
+</ParamField>
+
+<ParamField body="maxCandidateLinks" type="integer" default={5}>
+  Max number of candidate links to return after ranking/selection
+</ParamField>
+
+<ParamField body="maxFilterLlmCalls" type="integer" default={3}>
+  Maximum number of LLM calls for filtering irrelevant links
+</ParamField>
+
+## Response
+
+<ResponseField name="jobId" type="string" required>
+  Unique identifier of the created discovery job (UUID format)
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/discovery/550e8400-e29b-41d4-a716-446655440000/discovery" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "applicationName": "midPoint",
+    "applicationVersion": "4.8",
+    "llmGeneratedSearchQuery": false,
+    "usePreviousSessionData": true,
+    "enableLinkFiltering": true,
+    "enableLinkRanking": true,
+    "numQueries": 5,
+    "maxResultsPerQuery": 10,
+    "maxCandidateLinks": 5,
+    "maxFilterLlmCalls": 3
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "jobId": "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+}
+```
+
+## Notes
+
+- The discovery job runs asynchronously. Use the [Get Discovery Status](/api/discovery/status) endpoint to check the job progress
+- The discovered candidate links are stored in the session under the `discoveryOutput` key
+- The job ID is also stored in the session as `discoveryJobId` for convenient status checking

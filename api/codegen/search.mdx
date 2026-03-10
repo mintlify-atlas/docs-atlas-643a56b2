@@ -1,0 +1,250 @@
+---
+title: "Generate Search Code"
+api: "POST /api/v1/session/{session_id}/classes/{object_class}/search/{intent}"
+description: "Generate Groovy search code for querying objects in the target system"
+---
+
+## Overview
+
+Generates Groovy search operation code for the specified object class. This endpoint creates code that handles querying, filtering, and retrieving objects from the target system. It automatically loads attributes and endpoints from the session and uses documentation chunks to generate accurate search logic.
+
+## Path Parameters
+
+<ParamField path="session_id" type="string (UUID)" required>
+  The unique identifier of the session
+</ParamField>
+
+<ParamField path="object_class" type="string" required>
+  The name of the object class (e.g., "account", "user", "group")
+</ParamField>
+
+<ParamField path="intent" type="string" required>
+  The search intent or operation type (typically "search")
+</ParamField>
+
+## Query Parameters
+
+<ParamField query="usePreviousSessionData" type="boolean" default="true">
+  Whether to use previous session data for generation. Set to `false` to force regeneration from scratch.
+</ParamField>
+
+## Request
+
+No request body is required. The endpoint automatically loads:
+- Attributes from session data
+- Endpoints from session data
+- Relevant documentation chunks for the search operation
+
+## Response
+
+<ResponseField name="jobId" type="string (UUID)" required>
+  The unique identifier for the created code generation job
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "jobId": "c3d4e5f6-a7b8-9012-cdef-123456789012"
+}
+```
+
+## Prerequisites
+
+Before calling this endpoint, you must:
+
+1. Create a session using `POST /api/v1/session`
+2. Generate attributes using `POST /api/v1/session/{session_id}/classes/{object_class}/attributes`
+3. Generate endpoints using `POST /api/v1/session/{session_id}/classes/{object_class}/endpoints`
+
+If attributes or endpoints are not found in the session, the endpoint returns a 404 error.
+
+## Status Codes
+
+<ResponseField name="200" type="OK">
+  Job created successfully
+</ResponseField>
+
+<ResponseField name="404" type="Not Found">
+  Session not found, attributes not available, or endpoints not available
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/search/search?usePreviousSessionData=true" \
+  -H "Content-Type: application/json"
+```
+
+## Checking Job Status
+
+After creating the job, use the GET endpoint to check the generation status. This endpoint returns multi-document progress tracking:
+
+<CodeGroup>
+```bash cURL
+curl "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/search/search?jobId=c3d4e5f6-a7b8-9012-cdef-123456789012"
+```
+</CodeGroup>
+
+### Status Response
+
+```json
+{
+  "jobId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "status": "running",
+  "createdAt": "2026-03-10T12:02:00Z",
+  "startedAt": "2026-03-10T12:02:01Z",
+  "updatedAt": "2026-03-10T12:02:15Z",
+  "progress": {
+    "stage": "generating",
+    "message": "Processing documentation chunks",
+    "processedDocuments": 3,
+    "totalDocuments": 10
+  }
+}
+```
+
+### Completed Job Response
+
+```json
+{
+  "jobId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "status": "finished",
+  "createdAt": "2026-03-10T12:02:00Z",
+  "startedAt": "2026-03-10T12:02:01Z",
+  "updatedAt": "2026-03-10T12:03:45Z",
+  "progress": {
+    "stage": "finished",
+    "message": "Search code generated successfully",
+    "processedDocuments": 10,
+    "totalDocuments": 10
+  },
+  "result": {
+    "code": "// Generated search Groovy code\n..."
+  }
+}
+```
+
+## Manually Override Search Code
+
+You can manually override the generated search code using the PUT endpoint:
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.example.com/api/v1/session/123e4567-e89b-12d3-a456-426614174000/classes/account/search/search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "// Custom search Groovy code\n..."
+  }'
+```
+</CodeGroup>
+
+### Override Response
+
+```json
+{
+  "message": "Search code for account overridden successfully",
+  "sessionId": "123e4567-e89b-12d3-a456-426614174000",
+  "objectClass": "account"
+}
+```
+
+## Generated Code Structure
+
+The generated search code typically includes:
+
+- API endpoint construction
+- Query parameter handling
+- Pagination logic
+- Result parsing and transformation
+- Error handling
+- Filtering and search criteria mapping
+
+Example generated search code:
+
+```groovy
+import groovy.json.JsonSlurper
+
+def searchAccounts(ObjectClass objectClass, Filter filter, ResultsHandler handler, OperationOptions options) {
+    log.info("Executing search for {0}", objectClass)
+    
+    // Build query parameters
+    def params = [:]
+    if (filter) {
+        params.putAll(buildFilterParams(filter))
+    }
+    
+    // Handle pagination
+    def pageSize = options.pageSize ?: 100
+    def pageOffset = options.pagedResultsOffset ?: 0
+    
+    params.limit = pageSize
+    params.offset = pageOffset
+    
+    // Execute API call
+    def response = connection.get("/api/users", params)
+    def jsonSlurper = new JsonSlurper()
+    def data = jsonSlurper.parseText(response)
+    
+    // Process results
+    data.users.each { user ->
+        def builder = new ConnectorObjectBuilder()
+        builder.setObjectClass(objectClass)
+        builder.setUid(user.id as String)
+        builder.setName(user.username as String)
+        
+        // Add attributes
+        builder.addAttribute("email", user.email)
+        builder.addAttribute("active", user.active)
+        builder.addAttribute("firstName", user.firstName)
+        builder.addAttribute("lastName", user.lastName)
+        
+        handler.handle(builder.build())
+    }
+    
+    // Return search result metadata
+    return new SearchResult(data.nextPageToken, data.totalResults)
+}
+```
+
+## Multi-Document Processing
+
+Search code generation processes multiple documentation chunks to ensure comprehensive coverage:
+
+- **processedDocuments**: Number of documentation chunks analyzed
+- **totalDocuments**: Total number of relevant chunks for this operation
+- Progress updates occur as each chunk is processed
+
+## Error Responses
+
+### 404 Not Found - Session Not Found
+
+```json
+{
+  "detail": "Session with ID 123e4567-e89b-12d3-a456-426614174000 not found"
+}
+```
+
+### 404 Not Found - Attributes Not Available
+
+```json
+{
+  "detail": "No attributes found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/attributes endpoint first."
+}
+```
+
+### 404 Not Found - Endpoints Not Available
+
+```json
+{
+  "detail": "No endpoints found for account in session 123e4567-e89b-12d3-a456-426614174000. Please run /classes/account/endpoints endpoint first."
+}
+```
+
+## Related Endpoints
+
+- [Generate Attributes](/api/digester/attributes) - Generate attributes (prerequisite)
+- [Generate Endpoints](/api/digester/endpoints) - Generate endpoints (prerequisite)
+- [Generate Create Code](/api/codegen/create) - Generate create operation code
+- [Generate Update Code](/api/codegen/update) - Generate update operation code
+- [Generate Delete Code](/api/codegen/delete) - Generate delete operation code

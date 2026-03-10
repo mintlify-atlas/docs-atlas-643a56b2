@@ -1,0 +1,663 @@
+---
+title: 'Architecture'
+description: 'System components and data flow overview'
+icon: 'diagram-project'
+---
+
+The midPilot Connector Generator is built as a modular microservice with four primary processing modules, a PostgreSQL database layer, and an asynchronous job system. This architecture enables scalable, AI-powered connector generation from any API documentation.
+
+## System Overview
+
+```mermaid
+graph TB
+    Client[Client/API Consumer]
+    Session[Session Management]
+    Discovery[Discovery Module]
+    Scrape[Scrape Module]
+    Digester[Digester Module]
+    CodeGen[CodeGen Module]
+    DB[(PostgreSQL Database)]
+    Jobs[Job Queue System]
+    LLM[LLM Provider]
+    
+    Client -->|1. Create Session| Session
+    Session --> DB
+    Client -->|2. Find Docs| Discovery
+    Client -->|3. Scrape Docs| Scrape
+    Discovery --> Jobs
+    Scrape --> Jobs
+    Jobs --> LLM
+    Jobs --> DB
+    Client -->|4. Extract Schema| Digester
+    Digester --> Jobs
+    Client -->|5. Generate Code| CodeGen
+    CodeGen --> Jobs
+    
+    style Session fill:#e1f5ff
+    style Discovery fill:#fff3cd
+    style Scrape fill:#d4edda
+    style Digester fill:#cce5ff
+    style CodeGen fill:#d1ecf1
+```
+
+## Core Components
+
+### Session Management
+
+Sessions are the foundation of the connector generation workflow. Each session:
+
+- Has a unique UUID identifier
+- Stores all processing results (documentation, schemas, generated code)
+- Tracks associated jobs and their status
+- Maintains session data in a flexible JSONB structure
+
+**Key Endpoints:**
+- `POST /api/v1/session` - Create a new session
+- `GET /api/v1/session/{sessionId}` - Retrieve session data
+- `DELETE /api/v1/session/{sessionId}` - Delete session and all associated data
+
+**Session Data Structure:**
+```python
+# Database Model: src/common/database/models/session.py
+class Session(Base):
+    session_id: UUID
+    created_at: datetime
+    updated_at: datetime
+    jobs: List[Job]  # All jobs in this session
+    documentation_items: List[DocumentationItem]  # Processed docs
+    session_data: List[SessionData]  # Key-value storage
+```
+
+<Tip>
+Sessions store results with predictable keys like `objectClassesOutput`, `{objectClass}AttributesOutput`, and `{objectClass}Search` for easy retrieval.
+</Tip>
+
+### Module 1: Discovery
+
+**Purpose:** Automatically discover relevant API documentation URLs
+
+**Location:** `src/modules/discovery/`
+
+The Discovery module uses web search and AI to find candidate documentation URLs for a given application.
+
+**How it works:**
+
+<Steps>
+  <Step title="Search Query Generation">
+    Uses the application name and version to construct targeted search queries
+  </Step>
+  <Step title="Web Search">
+    Executes searches using configured search providers (Brave Search, DuckDuckGo)
+  </Step>
+  <Step title="URL Filtering">
+    LLMs analyze search results to identify relevant documentation URLs
+  </Step>
+  <Step title="Result Storage">
+    Stores candidate URLs in session as `discoveryOutput`
+  </Step>
+</Steps>
+
+**API Endpoints:**
+- `POST /api/v1/discovery/{sessionId}/discovery` - Start discovery job
+- `GET /api/v1/discovery/{sessionId}/discovery` - Get discovery status
+
+**Configuration:**
+```python
+# src/config.py
+class SearchSettings(BaseModel):
+    method_name: str = ""
+    discovery_input_check_interval: timedelta = timedelta(weeks=4)
+
+class BraveSettings(BaseModel):
+    api_key: str = ""
+    endpoint: str = "https://api.search.brave.com/res/v1/web/search"
+```
+
+### Module 2: Scrape
+
+**Purpose:** Scrape and process documentation from URLs
+
+**Location:** `src/modules/scrape/`
+
+The Scrape module fetches documentation from URLs, chunks it, and processes it with LLMs to extract structured information.
+
+**How it works:**
+
+<Steps>
+  <Step title="URL Crawling">
+    Uses Crawl4AI to fetch HTML content from documentation URLs
+  </Step>
+  <Step title="Content Extraction">
+    Converts HTML to clean markdown format
+  </Step>
+  <Step title="Intelligent Chunking">
+    Splits content into chunks with token overlap for LLM processing
+    ```python
+    # src/common/chunks.py
+    chunks = split_text_with_token_overlap(
+        doc_text, 
+        max_tokens=config.scrape_and_process.chunk_length,  # Default: 20000
+        overlap_ratio=0.05
+    )
+    ```
+  </Step>
+  <Step title="LLM Processing">
+    Each chunk is analyzed to extract:
+    - Summary
+    - Metadata (app name, version, category)
+    - Tags for relevance matching
+  </Step>
+  <Step title="Database Storage">
+    Stores processed chunks as `DocumentationItem` records
+  </Step>
+</Steps>
+
+**API Endpoints:**
+- `POST /api/v1/scrape/{sessionId}/scrape` - Start scraping job
+- `GET /api/v1/scrape/{sessionId}/scrape` - Get scraping status
+- `POST /api/v1/session/{sessionId}/documentation` - Upload documentation file
+
+**Configuration:**
+```python
+# src/config.py
+class ScrapeAndProcessSettings(BaseModel):
+    max_scraper_iterations: int = 4
+    max_iterations_filter_irrelevant: int = 5
+    chunk_length: int = 20000
+    max_concurrent: int = 20
+    chunk_categories: list[str] = [
+        "spec_yaml", "spec_json", "reference_api",
+        "reference_other", "overview", "index",
+        "tutorial", "non-technical", "other"
+    ]
+```
+
+<Info>
+Documentation can come from two sources: scraped from URLs or uploaded as files. Both are processed identically after chunking.
+</Info>
+
+### Module 3: Digester
+
+**Purpose:** Extract structured schemas from documentation
+
+**Location:** `src/modules/digester/`
+
+The Digester module uses LLMs to analyze documentation chunks and extract object classes, attributes, endpoints, authentication, and relationships.
+
+**Extraction Pipeline:**
+
+<Steps>
+  <Step title="Object Classes">
+    `POST /api/v1/digester/{sessionId}/classes`
+    
+    Identifies primary object types (User, Group, Account, etc.) from documentation
+    
+    **Output:**
+    ```json
+    {
+      "objectClasses": [
+        {
+          "name": "User",
+          "description": "User account object",
+          "relevant": true,
+          "relevantChunks": [{"docUuid": "..."}]
+        }
+      ]
+    }
+    ```
+  </Step>
+  
+  <Step title="Attributes">
+    `POST /api/v1/digester/{sessionId}/classes/{objectClass}/attributes`
+    
+    Extracts attribute schemas for each object class
+    
+    **Output:**
+    ```json
+    {
+      "attributes": {
+        "id": {
+          "type": "string",
+          "required": true,
+          "readOnly": false,
+          "multivalued": false
+        }
+      }
+    }
+    ```
+  </Step>
+  
+  <Step title="Endpoints">
+    `POST /api/v1/digester/{sessionId}/classes/{objectClass}/endpoints`
+    
+    Discovers API endpoints for CRUD operations
+    
+    **Output:**
+    ```json
+    {
+      "endpoints": [
+        {
+          "operation": "list",
+          "method": "GET",
+          "path": "/api/v1/users"
+        }
+      ]
+    }
+    ```
+  </Step>
+  
+  <Step title="Authentication">
+    `POST /api/v1/digester/{sessionId}/auth`
+    
+    Extracts authentication methods and requirements
+  </Step>
+  
+  <Step title="Metadata">
+    `POST /api/v1/digester/{sessionId}/metadata`
+    
+    Extracts API metadata like base URLs and versioning
+  </Step>
+  
+  <Step title="Relations">
+    `POST /api/v1/digester/{sessionId}/relations`
+    
+    Identifies relationships between object classes
+  </Step>
+</Steps>
+
+**Relevancy Filtering:**
+
+The Digester uses a relevancy filtering system to focus LLM processing on the most important chunks:
+
+```python
+# src/common/chunk_filter/filter.py
+async def filter_documentation_items(
+    criteria: FilterCriteria,
+    session_id: UUID,
+    db: AsyncSession
+) -> List[Dict[str, Any]]
+```
+
+**Filter Criteria:**
+- Required tags (e.g., ["endpoint", "api"])
+- Allowed categories (e.g., ["spec_yaml", "reference_api"])
+- Minimum relevancy scores
+- App name/version matching
+
+### Module 4: CodeGen
+
+**Purpose:** Generate Groovy connector code
+
+**Location:** `src/modules/codegen/`
+
+The CodeGen module takes extracted schemas and generates production-ready Groovy code for ConnID connectors.
+
+**Code Generation Operations:**
+
+<CardGroup cols={2}>
+  <Card title="Native Schema" icon="diagram-nested">
+    `POST /codegen/{sessionId}/classes/{objectClass}/native-schema`
+    
+    Generates the native schema definition
+  </Card>
+  
+  <Card title="ConnID Mapping" icon="arrows-left-right">
+    `POST /codegen/{sessionId}/classes/{objectClass}/connid`
+    
+    Creates attribute mappings between native and ConnID schemas
+  </Card>
+  
+  <Card title="Search Operation" icon="magnifying-glass">
+    `POST /codegen/{sessionId}/classes/{objectClass}/search/{intent}`
+    
+    Generates code to list/search objects
+  </Card>
+  
+  <Card title="Create Operation" icon="plus">
+    `POST /codegen/{sessionId}/classes/{objectClass}/create`
+    
+    Generates code to create new objects
+  </Card>
+  
+  <Card title="Update Operation" icon="pen">
+    `POST /codegen/{sessionId}/classes/{objectClass}/update`
+    
+    Generates code to update existing objects
+  </Card>
+  
+  <Card title="Delete Operation" icon="trash">
+    `POST /codegen/{sessionId}/classes/{objectClass}/delete`
+    
+    Generates code to delete objects
+  </Card>
+  
+  <Card title="Relation Code" icon="link">
+    `POST /codegen/{sessionId}/relations/{relationName}`
+    
+    Generates code for managing relationships
+  </Card>
+</CardGroup>
+
+**Code Generation Process:**
+
+```python
+# src/modules/codegen/core/generate_groovy.py
+async def create_search(
+    attributes: dict,
+    endpoints: dict,
+    session_id: UUID,
+    object_class: str
+) -> dict:
+    # 1. Load relevant documentation chunks
+    # 2. Generate Groovy code using LLM
+    # 3. Validate and format code
+    # 4. Return structured result
+```
+
+<Note>
+All code generation is context-aware, using relevant documentation chunks to ensure the generated code matches the actual API behavior.
+</Note>
+
+## Database Layer
+
+**Technology:** PostgreSQL 15 with async support (asyncpg, SQLAlchemy)
+
+**Location:** `src/common/database/`
+
+### Data Models
+
+<Tabs>
+  <Tab title="Session">
+    ```python
+    # src/common/database/models/session.py
+    class Session(Base):
+        session_id: UUID
+        created_at: datetime
+        updated_at: datetime
+    ```
+    
+    Central entity that owns all other data
+  </Tab>
+  
+  <Tab title="Job">
+    ```python
+    # src/common/database/models/job.py
+    class Job(Base):
+        job_id: UUID
+        session_id: UUID
+        job_type: str
+        status: str  # queued, running, finished, failed
+        input: Dict[str, Any]
+        result: Dict[str, Any]
+        errors: List[str]
+        progress: JobProgress
+    ```
+    
+    Tracks asynchronous operations
+  </Tab>
+  
+  <Tab title="DocumentationItem">
+    ```python
+    # src/common/database/models/documentation_item.py
+    class DocumentationItem(Base):
+        id: UUID
+        session_id: UUID
+        page_id: UUID
+        source: str  # 'scraper' or 'upload'
+        content: str
+        summary: str
+        metadata: Dict[str, Any]
+        scrape_job_ids: List[str]
+    ```
+    
+    Stores processed documentation chunks
+  </Tab>
+  
+  <Tab title="SessionData">
+    ```python
+    # src/common/database/models/session_data.py
+    class SessionData(Base):
+        session_id: UUID
+        key: str
+        value: Dict[str, Any]  # JSONB
+    ```
+    
+    Flexible key-value storage for session state
+  </Tab>
+  
+  <Tab title="RelevantChunk">
+    ```python
+    # src/common/database/models/relevant_chunk.py
+    class RelevantChunk(Base):
+        session_id: UUID
+        object_class: str
+        doc_item_uuid: UUID
+        relevance_score: float
+    ```
+    
+    Tracks which chunks are relevant to which object classes
+  </Tab>
+</Tabs>
+
+### Database Migration
+
+The system uses Alembic for database migrations:
+
+```bash
+# src/common/database/config.py
+DATABASE_URL=postgresql+asyncpg://user:pass@host:port/db
+
+# Run migrations
+uv run alembic upgrade head
+```
+
+## Job System
+
+**Purpose:** Handle long-running asynchronous operations
+
+**Location:** `src/common/jobs.py`
+
+### Job Lifecycle
+
+<Steps>
+  <Step title="Job Creation">
+    ```python
+    job_id = await schedule_coroutine_job(
+        job_type="digester.getObjectClass",
+        input_payload={...},
+        worker=service.extract_object_classes,
+        initial_stage="queue",
+        session_id=session_id
+    )
+    ```
+  </Step>
+  
+  <Step title="Job Execution">
+    Worker function runs asynchronously, updating progress and status
+  </Step>
+  
+  <Step title="Progress Tracking">
+    ```python
+    # src/common/database/models/job_progress.py
+    class JobProgress(Base):
+        stage: str  # queue, chunking, processing, finishing
+        message: str
+        iteration: int
+        processed_documents: int
+        total_documents: int
+    ```
+  </Step>
+  
+  <Step title="Result Storage">
+    Job result stored in database and optionally in session data
+  </Step>
+</Steps>
+
+### Job Status Values
+
+- `queued` - Job created, waiting for execution
+- `running` - Job currently executing
+- `finished` - Job completed successfully, result available
+- `failed` - Job encountered an error, check errors array
+
+### Job Recovery
+
+```python
+# src/common/jobs.py
+async def recover_stale_running_jobs():
+    """Reset jobs stuck in 'running' state after restart"""
+```
+
+On application startup, any jobs in "running" state are reset to "failed" to handle crashes.
+
+## LLM Integration
+
+**Location:** `src/common/llm.py`, `src/common/chunk_processor/`
+
+### LLM Provider Configuration
+
+```python
+# src/config.py
+class LLMSettings(BaseModel):
+    openai_api_key: str = ""
+    openai_api_base: str = "https://openrouter.ai/api/v1"
+    model_name: str = "openai/gpt-oss-20b"
+    request_timeout: int = 120
+    provider_order: List[str] = [
+        "groq", "wandb/fp4", "clarifai/fp4"
+    ]
+```
+
+### Chunk Processing Pipeline
+
+```python
+# src/common/chunk_processor/processor.py
+async def process_chunk(
+    chunk: str,
+    app_name: str,
+    app_version: str
+) -> ProcessedChunk:
+    # 1. Build prompt with context
+    # 2. Call LLM with structured output
+    # 3. Parse and validate response
+    # 4. Return structured data
+```
+
+**LLM Tasks:**
+- Extract metadata from chunks (app name, version, category)
+- Identify object classes in documentation
+- Extract attribute schemas with types and constraints
+- Discover API endpoints with methods and paths
+- Generate Groovy code from schemas and examples
+
+### Tracing with Langfuse
+
+Optional LLM tracing for debugging and monitoring:
+
+```python
+# src/config.py
+class LangfuseSettings(BaseModel):
+    public_key: str = "emptykey"
+    secret_key: str = "emptykey"
+    tracing_enabled: bool = False
+    environment: str = "dev-whoami"
+```
+
+<Info>
+Enable Langfuse tracing to track LLM calls, token usage, latency, and debug prompt/response pairs.
+</Info>
+
+## API Structure
+
+**Base URL:** `http://localhost:8090/api/v1`
+
+**Router Configuration:**
+
+```python
+# src/router.py
+root_router.include_router(session_router, prefix="/session")
+root_router.include_router(discovery_router, prefix="/discovery")
+root_router.include_router(scrape_router, prefix="/scrape")
+root_router.include_router(digester_router, prefix="/digester")
+root_router.include_router(codegen_router, prefix="/codegen")
+```
+
+All endpoints follow a consistent pattern:
+- Session-centric (most operations require `{sessionId}`)
+- Asynchronous (return `jobId` immediately)
+- RESTful (standard HTTP methods)
+
+## Deployment Considerations
+
+### Environment Configuration
+
+```bash
+# .env
+APP__PORT=8090
+APP__HOST=0.0.0.0
+
+# Database
+DATABASE__HOST=localhost
+DATABASE__PORT=5432
+DATABASE__USER=user
+DATABASE__PASSWORD=password
+DATABASE__NAME=db
+
+# LLM
+LLM__OPENAI_API_KEY=your-key
+LLM__MODEL_NAME=openai/gpt-4o
+
+# Optional: Langfuse tracing
+LANGFUSE__TRACING_ENABLED=true
+LANGFUSE__PUBLIC_KEY=pk-...
+LANGFUSE__SECRET_KEY=sk-...
+```
+
+### Docker Deployment
+
+```bash
+# Build
+docker compose build
+
+# Run with database
+docker compose up
+```
+
+The application includes:
+- PostgreSQL 15 database service
+- Automatic migration on startup
+- Health check endpoint at `/health`
+
+### Scalability
+
+**Current Implementation:**
+- Single worker process
+- In-process job queue
+- Session-based state management
+
+**Scaling Considerations:**
+- Add Redis for distributed job queue
+- Implement horizontal scaling with multiple workers
+- Consider caching for frequently accessed session data
+- Use connection pooling for database (already configured)
+
+<Warning>
+The current job system is in-process. For production deployments with multiple workers, implement a distributed job queue like Celery or RQ.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Try the complete workflow with a real API
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/sessions/create">
+    Explore detailed API documentation
+  </Card>
+  <Card title="Configuration" icon="gear" href="/guides/configuration">
+    Configure LLM providers and settings
+  </Card>
+  <Card title="Installation" icon="code" href="/guides/installation">
+    Set up local development environment
+  </Card>
+</CardGroup>
